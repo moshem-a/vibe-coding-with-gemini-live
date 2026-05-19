@@ -1,0 +1,7 @@
+.git
+.gitignore
+.env
+config.local.js
+node_modules
+*.md
+.DS_Store

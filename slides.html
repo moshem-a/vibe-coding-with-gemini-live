@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vibe Coding with Gemini Live — How it works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --gc-blue: #1a73e8;
+    --gc-blue-600: #1967d2;
+    --gc-green: #34a853;
+    --gc-red: #ea4335;
+    --gc-yellow: #fbbc04;
+    --gemini-purple: #9b72cb;
+    --gemini-pink: #d96570;
+    --bg: #0e1014;
+    --panel: #1a1d23;
+    --panel-2: #23272f;
+    --text: #e8eaed;
+    --text-dim: #9aa0a6;
+    --text-faint: #5f6368;
+    --border: rgba(255,255,255,.08);
+    --r-md: 12px;
+    --r-lg: 20px;
+    --r-xl: 28px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Google Sans", system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+  }
+  code, pre, .mono { font-family: "Roboto Mono", ui-monospace, monospace; }
+
+  /* slide stage */
+  .deck { position: relative; height: 100vh; width: 100vw; }
+  .slide {
+    position: absolute; inset: 0;
+    padding: 56px 80px;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity .25s ease;
+  }
+  .slide.active { display: flex; opacity: 1; }
+
+  /* chrome */
+  .chrome-top, .chrome-bottom {
+    position: fixed;
+    left: 0; right: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 32px;
+    font-size: 13px; color: var(--text-faint);
+    pointer-events: none;
+  }
+  .chrome-top { top: 0; }
+  .chrome-bottom { bottom: 0; }
+  .chrome-top .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 500; color: var(--text-dim);
+  }
+  .brand .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--gc-blue), var(--gemini-purple), var(--gemini-pink), var(--gc-yellow));
+  }
+  .chrome-bottom .nav {
+    pointer-events: auto;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .nav button {
+    background: var(--panel-2); color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font: inherit; font-size: 12px;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .nav button:hover { background: var(--panel); color: var(--text); }
+  .progress {
+    position: fixed; left: 0; top: 0; height: 3px;
+    background: linear-gradient(90deg, var(--gc-blue), var(--gemini-purple), var(--gemini-pink), var(--gc-yellow));
+    transition: width .3s ease;
+    z-index: 10;
+  }
+
+  /* typography */
+  h1 {
+    font-size: clamp(40px, 5vw, 64px);
+    font-weight: 500;
+    margin: 0 0 16px;
+    line-height: 1.1;
+    letter-spacing: -.02em;
+  }
+  h2 {
+    font-size: clamp(28px, 3vw, 40px);
+    font-weight: 500;
+    margin: 0 0 28px;
+    letter-spacing: -.01em;
+  }
+  .eyebrow {
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--gemini-purple);
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .lead {
+    font-size: clamp(18px, 1.6vw, 22px);
+    color: var(--text-dim);
+    line-height: 1.55;
+    max-width: 900px;
+  }
+
+  .gradient-text {
+    background: linear-gradient(120deg, var(--gc-blue), var(--gemini-purple), var(--gemini-pink), var(--gc-yellow));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* card grid */
+  .grid { display: grid; gap: 20px; }
+  .grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  .grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .grid.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .card .num {
+    width: 32px; height: 32px;
+    border-radius: 10px;
+    background: rgba(155,114,203,.15);
+    color: var(--gemini-purple);
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 14px;
+    margin-bottom: 8px;
+  }
+  .card h3 { margin: 0; font-weight: 500; font-size: 20px; }
+  .card .desc { color: var(--text-dim); font-size: 14px; line-height: 1.55; }
+  .card .pill {
+    display: inline-block; padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(26,115,232,.15);
+    color: var(--gc-blue);
+    font-size: 11px; font-weight: 600;
+    align-self: flex-start;
+    letter-spacing: .04em;
+  }
+  .card.green .num { background: rgba(52,168,83,.15); color: var(--gc-green); }
+  .card.blue .num  { background: rgba(26,115,232,.15); color: var(--gc-blue); }
+  .card.yellow .num { background: rgba(251,188,4,.15); color: var(--gc-yellow); }
+  .card.pink .num   { background: rgba(217,101,112,.15); color: var(--gemini-pink); }
+
+  /* ascii diagram */
+  pre.diagram {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 20px 24px;
+    color: var(--text);
+    font-size: 12px; line-height: 1.45;
+    overflow: auto;
+    max-height: 60vh;
+  }
+
+  /* timeline */
+  .timeline {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+    margin-top: 32px;
+  }
+  .step {
+    position: relative;
+    padding: 24px;
+    border-right: 1px solid var(--border);
+  }
+  .step:last-child { border-right: none; }
+  .step .marker {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .step .marker .num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--gc-blue), var(--gemini-purple));
+    color: white; font-weight: 700; font-size: 13px;
+    display: grid; place-items: center;
+  }
+  .step .marker .label {
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--text-faint); font-weight: 700;
+  }
+  .step h3 { margin: 0 0 8px; font-size: 18px; font-weight: 500; }
+  .step p { margin: 0; color: var(--text-dim); font-size: 13px; line-height: 1.5; }
+
+  /* tool table */
+  table.tools {
+    width: 100%;
+    border-collapse: separate; border-spacing: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    font-size: 13px;
+  }
+  table.tools th, table.tools td {
+    text-align: left; padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  table.tools th {
+    background: var(--panel-2);
+    font-weight: 500; color: var(--text-dim);
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  }
+  table.tools tr:last-child td { border-bottom: none; }
+  table.tools code {
+    color: var(--gemini-purple);
+    background: rgba(155,114,203,.10);
+    padding: 2px 8px; border-radius: 6px;
+    font-size: 12px;
+  }
+  table.tools td.desc { color: var(--text-dim); }
+
+  /* phase bar */
+  .phases {
+    display: flex; gap: 16px; margin-top: 32px;
+  }
+  .phase {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 20px;
+  }
+  .phase .pidx {
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--gemini-purple); font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .phase h3 { margin: 0 0 8px; font-size: 18px; font-weight: 500; }
+  .phase p { margin: 0; color: var(--text-dim); font-size: 13px; line-height: 1.55; }
+
+  /* big chips */
+  .chip-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+  .chip {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .chip .k { color: var(--text); font-weight: 500; }
+
+  /* call-out */
+  .callout {
+    border-left: 4px solid var(--gc-blue);
+    background: rgba(26,115,232,.08);
+    border-radius: 10px;
+    padding: 16px 20px;
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.55;
+    margin-top: 24px;
+    max-width: 900px;
+  }
+  .callout.purple { border-color: var(--gemini-purple); background: rgba(155,114,203,.08); }
+  .callout.green  { border-color: var(--gc-green); background: rgba(52,168,83,.08); }
+  .callout.yellow { border-color: var(--gc-yellow); background: rgba(251,188,4,.08); }
+
+  /* title slide */
+  .title-slide {
+    align-items: flex-start;
+    background: radial-gradient(circle at 20% 30%, rgba(26,115,232,.18), transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(155,114,203,.18), transparent 50%),
+                radial-gradient(circle at 50% 100%, rgba(217,101,112,.12), transparent 50%);
+  }
+  .title-slide h1 {
+    font-size: clamp(48px, 7vw, 96px);
+    line-height: 1.0;
+  }
+  .title-slide .lead { font-size: clamp(20px, 2vw, 26px); }
+  .title-slide .meta {
+    margin-top: 36px;
+    display: flex; gap: 28px; color: var(--text-dim); font-size: 14px;
+  }
+  .title-slide .meta b { color: var(--text); font-weight: 500; }
+
+  /* closing */
+  .closing { text-align: center; align-items: center; }
+  .closing h1 { text-align: center; }
+  .closing .lead { text-align: center; }
+
+  /* speaker bubble illustration */
+  .pulse {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gc-red);
+    box-shadow: 0 0 0 0 rgba(234,67,53,.6);
+    animation: pulse 1.4s infinite;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 10px;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(234,67,53,.55); }
+    70% { box-shadow: 0 0 0 14px rgba(234,67,53,0); }
+    100% { box-shadow: 0 0 0 0 rgba(234,67,53,0); }
+  }
+</style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+
+  <div class="chrome-top">
+    <div class="brand"><span class="dot"></span> Vibe Coding with Gemini Live</div>
+    <div>Google Cloud Summit · Moshe</div>
+  </div>
+
+  <div class="deck" id="deck">
+
+    <!-- 1. Title -->
+    <section class="slide title-slide">
+      <div class="eyebrow">Google Cloud Summit · Live Demo</div>
+      <h1><span class="gradient-text">Vibe coding</span><br/>with Gemini Live.</h1>
+      <div class="lead">
+        Voice in. Voice out. The model doesn't just talk — it drives the product:
+        sketches architectures, generates UIs, calls sub-agents, edits the
+        running app while you speak.
+      </div>
+      <div class="meta">
+        <div><b>4</b> scenarios</div>
+        <div><b>Live</b> on Cloud Run</div>
+        <div><b>Hebrew-native</b> voice (you can speak any language)</div>
+      </div>
+    </section>
+
+    <!-- 2. What we're showing -->
+    <section class="slide">
+      <div class="eyebrow">What you'll see</div>
+      <h2>Four scenarios. One Live API.</h2>
+      <div class="grid cols-2">
+        <div class="card blue">
+          <div class="num">1</div>
+          <h3>Solutions Architect</h3>
+          <div class="desc">Describe an app — Gemini sketches a GCP architecture as a live Mermaid diagram, explains it out loud, takes feedback.</div>
+        </div>
+        <div class="card green">
+          <div class="num">2</div>
+          <h3>Vera · Visual Product Survey</h3>
+          <div class="desc">Camera-on. Vera watches you demonstrate opening a bottle, coaches in real-time, fills a structured report.</div>
+        </div>
+        <div class="card pink">
+          <div class="num">3</div>
+          <h3>Pair with Gemi</h3>
+          <div class="desc">Full vibe-coding loop: discovery → architecture → multi-view UI build with AI-generated images → voice-driven edits.</div>
+        </div>
+        <div class="card yellow">
+          <div class="num">4</div>
+          <h3>Live Translation</h3>
+          <div class="desc">Speak English. Hear Hebrew. 15 languages, streaming both ways with side-by-side transcript.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Why this is different -->
+    <section class="slide">
+      <div class="eyebrow">The big idea</div>
+      <h2>Most AI demos are <em>text in → text out</em>.<br/>This is <span class="gradient-text">voice in → product out</span>.</h2>
+      <div class="lead">
+        The model isn't behind a chat window. It holds <b>tool-calls</b> on the
+        Live API that drive React state directly: propose an architecture,
+        write a file, swap a logo, navigate the preview, consult another agent.
+        You speak — the UI changes.
+      </div>
+      <div class="callout purple">
+        <b>The flywheel:</b> microphone → 16 kHz PCM → Live WebSocket → model
+        thinks → speaks back (24 kHz audio) <em>and</em> emits a function-call
+        → React handler mutates state → UI re-renders → next user utterance.
+        All round-trip in well under a second.
+      </div>
+    </section>
+
+    <!-- 4. Architecture -->
+    <section class="slide">
+      <div class="eyebrow">How it's wired</div>
+      <h2>One static frontend. Three model endpoints.</h2>
+      <pre class="diagram">
+                ┌──────────────────────────────────────────────────────────┐
+                │  Browser  (Cloud Run · Nginx · static React + Babel)     │
+                │                                                          │
+   user voice ──┼─▶ MicCapture (16 kHz PCM AudioWorklet) ──┐               │
+                │                                          ▼               │
+                │                              ┌───────────────────────┐   │
+   model voice ◀┼── AudioPlayer (24 kHz) ◀─────│ Gemini Live WebSocket │   │
+                │                              │ gemini-3.1-flash-live │   │
+                │   tool-calls (JSON) ◀────────│ -preview · "Puck" he-IL│  │
+                │                              └───────────────────────┘   │
+                │           │                                              │
+                │           ├──▶ React state → renders diagram / code /    │
+                │           │     preview iframe / agent-activity rail     │
+                │           │                                              │
+                │           ├──▶ generate_logo  ─▶ Nano Banana / Imagen 4  │
+                │           │                                              │
+                │           └──▶ consult_designer / consult_qa /           │
+                │                consult_developer                         │
+                │                     │                                    │
+                │                     ▼                                    │
+                │           gemini-3.1-pro-preview (browser-direct)        │
+                │           role-specific prompts · JSON schemas           │
+                └──────────────────────────────────────────────────────────┘</pre>
+      <div class="callout">
+        No bundler. No backend round-trip. The whole demo is a single Nginx
+        container serving static React + Babel + a thin WebSocket client.
+      </div>
+    </section>
+
+    <!-- 5. The Live API tool-call loop -->
+    <section class="slide">
+      <div class="eyebrow">The contract</div>
+      <h2>Gemini Live = audio in, audio out, <span class="gradient-text">+ tool-calls</span>.</h2>
+      <table class="tools">
+        <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>propose_architecture</code></td><td class="desc">Emit a Mermaid GCP flowchart version</td></tr>
+          <tr><td><code>approve_architecture</code></td><td class="desc">Mark a version as the chosen one</td></tr>
+          <tr><td><code>start_build</code></td><td class="desc">Flip the UI into the "writing UI…" splash</td></tr>
+          <tr><td><code>write_file</code> / <code>update_file</code></td><td class="desc">Create or replace files; each write is snapshotted for history</td></tr>
+          <tr><td><code>show_preview</code></td><td class="desc">Mount the iframe with the generated index.html</td></tr>
+          <tr><td><code>generate_logo</code></td><td class="desc">Return a placeholder token; real image is generated and swapped at render time</td></tr>
+          <tr><td><code>navigate_preview</code></td><td class="desc">postMessage into the iframe to switch SPA views by voice</td></tr>
+          <tr><td><code>consult_designer / qa / developer</code></td><td class="desc">Fan out to specialist sub-agents (gemini-3.1-pro-preview with role prompts)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 6. Pair with Gemi — phases -->
+    <section class="slide">
+      <div class="eyebrow">Pair with Gemi</div>
+      <h2>A four-phase vibe-coding loop.</h2>
+      <div class="timeline">
+        <div class="step">
+          <div class="marker"><div class="num">1</div><div class="label">Discovery</div></div>
+          <h3>Ask, don't assume</h3>
+          <p>Gemi asks 3–4 short Hebrew questions: what app, who's it for, what scale, what data.</p>
+        </div>
+        <div class="step">
+          <div class="marker"><div class="num">2</div><div class="label">Architecture</div></div>
+          <h3>Sketch on GCP</h3>
+          <p>Mermaid flowchart of 5–9 GCP services with themed shapes. Ask for variants; approve by voice.</p>
+        </div>
+        <div class="step">
+          <div class="marker"><div class="num">3</div><div class="label">UI Build</div></div>
+          <h3>Designer · Logos · Code · QA</h3>
+          <p>Consult Designer, generate logo + content imagery with Nano Banana, write one self-contained index.html, run QA agent.</p>
+        </div>
+        <div class="step">
+          <div class="marker"><div class="num">4</div><div class="label">Live Edits</div></div>
+          <h3>Talk to ship</h3>
+          <p>"Make it darker." "Add a CTA." "Show me settings." Designer + QA + Developer agents loop in as needed; preview re-renders live.</p>
+        </div>
+      </div>
+      <div class="chip-row">
+        <div class="chip"><span class="k">Hebrew-locked voice</span> · <code>languageCode: "he-IL"</code></div>
+        <div class="chip"><span class="k">Auto-saved projects</span> · localStorage history with Load/Delete</div>
+        <div class="chip"><span class="k">Transcript hidden by default</span> · expandable on click</div>
+      </div>
+    </section>
+
+    <!-- 7. Sub-agents -->
+    <section class="slide">
+      <div class="eyebrow">Sub-agents</div>
+      <h2>Three specialists. One conversation.</h2>
+      <div class="grid cols-3">
+        <div class="card pink">
+          <div class="num">D</div>
+          <h3>Designer</h3>
+          <div class="desc">Palette, typography, layout, micro-interactions. Returns <code>{palette, typography, recommendations, css_snippet}</code>.</div>
+          <span class="pill" style="background:rgba(217,101,112,.15);color:var(--gemini-pink)">Material 3 + GCP gradients</span>
+        </div>
+        <div class="card yellow">
+          <div class="num">Q</div>
+          <h3>QA</h3>
+          <div class="desc">Reviews HTML for missing elements, broken interactions, a11y issues, UX gaps. Returns <code>{issues, ok}</code>.</div>
+          <span class="pill" style="background:rgba(251,188,4,.15);color:var(--gc-yellow)">Gates show_preview</span>
+        </div>
+        <div class="card green">
+          <div class="num">E</div>
+          <h3>Developer</h3>
+          <div class="desc">Engineering judgment calls: state machines, fragile patterns, cross-browser risks. Returns <code>{approach, code_snippet, considerations, risks}</code>.</div>
+          <span class="pill" style="background:rgba(52,168,83,.15);color:var(--gc-green)">For non-trivial JS</span>
+        </div>
+      </div>
+      <div class="callout green">
+        All three run as <code>gemini-3.1-pro-preview</code> with
+        <code>responseMimeType: "application/json"</code> and a JSON schema.
+        Same model, three system prompts — clean, fast, no infrastructure.
+      </div>
+    </section>
+
+    <!-- 8. Optional ADK / Agent Engine path -->
+    <section class="slide">
+      <div class="eyebrow">Optional · Admin observability</div>
+      <h2>Same agents, on Vertex AI Agent Engine.</h2>
+      <div class="grid cols-2">
+        <div class="card blue">
+          <div class="num">1</div>
+          <h3>Build with Google ADK</h3>
+          <div class="desc">
+            <code>LlmAgent(name="designer", model="gemini-3.1-pro-preview", instruction=DESIGNER_PROMPT)</code>
+            — same prompt, but now a deployable artifact.
+          </div>
+        </div>
+        <div class="card pink">
+          <div class="num">2</div>
+          <h3>Deploy via Cloud Build</h3>
+          <div class="desc">
+            No pip in Firebase Studio? No problem. <code>gcloud builds submit agents/</code>
+            runs the deploy inside <code>python:3.12</code>, writes
+            <code>deployed_engines.json</code> for the proxy image.
+          </div>
+        </div>
+        <div class="card yellow">
+          <div class="num">3</div>
+          <h3>Proxy on Cloud Run</h3>
+          <div class="desc">
+            FastAPI service, ADC creds, fans out to <code>agent_engines.get(...).stream_query(...)</code>,
+            streams events back as JSON for the browser.
+          </div>
+        </div>
+        <div class="card green">
+          <div class="num">4</div>
+          <h3>Watch sessions in the console</h3>
+          <div class="desc">
+            Each consult call shows up as a session with user_id, message,
+            full trace tree. The agent activity panel deep-links each card
+            to its Agent Engine session.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. Image generation -->
+    <section class="slide">
+      <div class="eyebrow">Inside generate_logo</div>
+      <h2>Tokens over the wire. Bytes at render time.</h2>
+      <div class="lead">
+        Gemini Live shouldn't round-trip megabytes of base64 PNG. Instead,
+        <code>generate_logo</code> returns a tiny token string like
+        <code>__ASSET_LOGO__</code>. The model writes that as the
+        <code>&lt;img src&gt;</code>. The host swaps the real data URL in
+        when it builds the iframe srcdoc.
+      </div>
+      <div class="grid cols-2" style="margin-top: 24px;">
+        <div class="card">
+          <h3>Nano Banana Pro</h3>
+          <div class="desc">
+            <code>nano-banana-pro-preview:generateContent</code> ·
+            <code>responseModalities: ["IMAGE"]</code>. Fast, iconic, great
+            for logos and stylized art.
+          </div>
+        </div>
+        <div class="card">
+          <h3>Imagen 4 Fast</h3>
+          <div class="desc">
+            <code>imagen-4.0-fast-generate-001:predict</code> ·
+            <code>aspectRatio: "1:1"</code>. Photo-real, great for hero
+            shots and product imagery.
+          </div>
+        </div>
+      </div>
+      <div class="callout yellow">
+        Last-resort: any <code>&lt;img&gt;</code> that fails to load (dead
+        URL, unsubstituted placeholder) auto-swaps to
+        <code>picsum.photos/seed/&lt;alt&gt;/W/H</code> — so the prototype
+        never shows a broken image on stage.
+      </div>
+    </section>
+
+    <!-- 10. Voice control of the SPA -->
+    <section class="slide">
+      <div class="eyebrow">Talking to the running app</div>
+      <h2>Voice navigates the preview. Without rewriting code.</h2>
+      <div class="lead">
+        Generated apps are required to be multi-view SPAs: every screen is a
+        <code>&lt;section data-view="..."&gt;</code> and a global
+        <code>window.showView(name)</code> swaps them.
+      </div>
+      <pre class="diagram" style="margin-top: 24px;">
+// In every generated index.html:
+window.addEventListener('message', (e) =&gt; {
+  if (e.data?.type === 'navigate') window.showView(e.data.view, e.data.params);
+  else if (e.data?.type === 'back') window.goBack();
+});
+
+// On the host: navigate_preview tool-call →
+previewIframe.contentWindow.postMessage(
+  { type: 'navigate', view: 'settings' }, '*'
+);</pre>
+      <div class="callout purple">
+        Say "show me the dashboard." Gemi emits
+        <code>navigate_preview({view: "dashboard"})</code>. The host
+        postMessages into the iframe. Zero re-renders, no file rewrites,
+        sub-100ms.
+      </div>
+    </section>
+
+    <!-- 11. What we built on stage today -->
+    <section class="slide">
+      <div class="eyebrow">Final polish</div>
+      <h2>What changed since last week.</h2>
+      <div class="grid cols-2">
+        <div class="card pink">
+          <div class="num">1</div>
+          <h3>Hebrew-locked voice</h3>
+          <div class="desc">Even if you speak English, Gemi always replies in Hebrew. <code>languageCode: "he-IL"</code> on the Live API + a hard rule in the system prompt.</div>
+        </div>
+        <div class="card blue">
+          <div class="num">2</div>
+          <h3>Transcript hidden by default</h3>
+          <div class="desc">Auto-transcripts are noisy on stage. The Pair-with-Gemi panel collapses them under one click.</div>
+        </div>
+        <div class="card green">
+          <div class="num">3</div>
+          <h3>Projects auto-save</h3>
+          <div class="desc">Every generated project is named, dated, and persisted to localStorage. The "Projects" button in the AppBar loads them back instantly.</div>
+        </div>
+        <div class="card yellow">
+          <div class="num">4</div>
+          <h3>More speech triggers</h3>
+          <div class="desc">Gemi MUST announce "האפליקציה שלך מוכנה!" after <code>show_preview</code> and confirm every <code>update_file</code> — no more silent gaps.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 12. Stack -->
+    <section class="slide">
+      <div class="eyebrow">Tech stack</div>
+      <h2>Boring on purpose.</h2>
+      <table class="tools">
+        <tbody>
+          <tr><td>UI</td><td class="desc">Static HTML + React 18 + in-browser Babel (no bundler, no build step)</td></tr>
+          <tr><td>Live conversation</td><td class="desc"><code>gemini-3.1-flash-live-preview</code> · WebSocket · voice "Puck"</td></tr>
+          <tr><td>Sub-agents</td><td class="desc"><code>gemini-3.1-pro-preview</code> · <code>responseMimeType: application/json</code> · JSON schemas</td></tr>
+          <tr><td>Images</td><td class="desc"><code>nano-banana-pro-preview</code> · <code>imagen-4.0-fast-generate-001</code></td></tr>
+          <tr><td>Audio</td><td class="desc">AudioWorklet @ 16 kHz capture · queued AudioBufferSource @ 24 kHz playback</td></tr>
+          <tr><td>Diagrams</td><td class="desc">Mermaid with GCP-themed classDefs</td></tr>
+          <tr><td>Hosting</td><td class="desc">Cloud Run · Nginx serving static assets · <code>gcloud run deploy --source</code></td></tr>
+          <tr><td>Optional backend</td><td class="desc">Google ADK + Vertex AI Agent Engine + FastAPI proxy on Cloud Run</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 13. Closing -->
+    <section class="slide closing">
+      <div class="eyebrow"><span class="pulse"></span>Live now</div>
+      <h1>Now let's talk to it.</h1>
+      <div class="lead" style="margin-top: 24px;">
+        <a href="https://googlive-1069070785804.us-central1.run.app" style="color: var(--gc-blue); text-decoration: none;">
+          googlive-1069070785804.us-central1.run.app
+        </a>
+      </div>
+      <div class="meta" style="margin-top: 40px; display: flex; gap: 28px; color: var(--text-faint); font-size: 13px;">
+        <div>Repo · github.com/moshem-a/vibe-coding-with-gemini-live</div>
+        <div>Built by Moshe · Google Cloud Summit</div>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="chrome-bottom">
+    <div class="nav">
+      <button id="prev">← Prev</button>
+      <span id="counter" style="color: var(--text-faint); font-size: 12px;">1 / 13</span>
+      <button id="next">Next →</button>
+    </div>
+    <div style="font-size: 11px; color: var(--text-faint);">← → / Space to navigate · F for fullscreen</div>
+  </div>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const counter = document.getElementById('counter');
+  const progress = document.getElementById('progress');
+  let i = 0;
+
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+    progress.style.width = ((i + 1) / slides.length * 100) + '%';
+    if (location.hash !== '#' + (i + 1)) {
+      history.replaceState(null, '', '#' + (i + 1));
+    }
+  }
+  function next() { show(i + 1); }
+  function prev() { show(i - 1); }
+
+  document.getElementById('next').onclick = next;
+  document.getElementById('prev').onclick = prev;
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); next(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key === 'f' || e.key === 'F') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    }
+  });
+
+  // jump via hash
+  const hash = parseInt(location.hash.slice(1), 10);
+  if (hash && hash >= 1 && hash <= slides.length) show(hash - 1);
+  else show(0);
+})();
+</script>
+</body>
+</html>

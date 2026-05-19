@@ -1,0 +1,32 @@
+# Secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+googlive/config.local.js
+googlive/.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node / build artifacts (not used today, but reserved)
+node_modules/
+dist/
+build/
+
+# Cloud Build / gcloud local state
+.gcloudignore
+
+# Generated artifacts
+*.log
