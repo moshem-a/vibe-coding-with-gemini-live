@@ -1007,6 +1007,25 @@ ${selectedArch.mermaid || ""}
             {activeTab === "architecture" && (
               <div className="diagram-stage gemi-diagram-stage" style={{ height: "100%" }}>
                 <div className="diagram-canvas">
+                  {currentProjectId && files.length === 0 && architectures.length > 0 && (
+                    <div className="legacy-arch-banner">
+                      <div className="ttl">This is an older project — only the architecture was preserved.</div>
+                      <div className="sub">
+                        It was saved before browser storage could fit the generated files. The diagram below is intact.
+                        Talk to Gemi and say <i>"build this for me"</i> and he'll rebuild from this architecture.
+                      </div>
+                      <button
+                        className="btn btn-gradient btn-sm"
+                        onClick={() => live.session.current?.sendText(
+                          "Please build this app from the approved architecture above. Start with start_build, then write_file('index.html', ...).",
+                          true
+                        )}
+                        disabled={!live.session.current}
+                      >
+                        <Icon name="bolt" size={12} color="white" /> Rebuild from this architecture
+                      </button>
+                    </div>
+                  )}
                   {selectedArch ? (
                     <div className="diagram-card">
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
@@ -1153,6 +1172,16 @@ ${selectedArch.mermaid || ""}
                             <code>{displayedFile.content || ""}</code>
                           </pre>
                         </>
+                      ) : currentProjectId && files.length === 0 && architectures.length > 0 ? (
+                        <div style={{ padding: 48, color: "#80868B", fontSize: 14, lineHeight: 1.6 }}>
+                          <div style={{ color: "#E6E6EB", fontSize: 16, marginBottom: 12 }}>No code in this project.</div>
+                          <div>
+                            This older project was saved before any files made it into browser storage —
+                            only the architecture survived. Open the <b style={{color:"#E6E6EB"}}>Architecture</b> tab
+                            and click <b style={{color:"#E6E6EB"}}>Rebuild from this architecture</b> to have Gemi
+                            generate the UI now.
+                          </div>
+                        </div>
                       ) : (
                         <div style={{ padding: 48, color: "#80868B", fontSize: 14 }}>
                           Code will stream in here.
@@ -1206,6 +1235,21 @@ ${selectedArch.mermaid || ""}
                         files={files}
                         recentlyWritten={recentlyWritten}
                       />
+                    ) : currentProjectId && files.length === 0 && architectures.length > 0 ? (
+                      <div className="empty">
+                        <div className="ic"><Icon name="diagram" size={36} color="#FBBC04" /></div>
+                        <div style={{ fontSize: 15, color: "var(--text-secondary)", maxWidth: 460, lineHeight: 1.55 }}>
+                          This older project has an architecture but no files. They were lost to a
+                          browser-storage limit on the previous save format.
+                        </div>
+                        <button
+                          className="btn btn-gradient btn-sm"
+                          style={{ marginTop: 14 }}
+                          onClick={() => { setActiveTab("architecture"); }}
+                        >
+                          Open architecture & rebuild
+                        </button>
+                      </div>
                     ) : (
                       <div className="empty">
                         <div className="ic"><Icon name="globe" size={36} color="#1A73E8" /></div>
@@ -1499,9 +1543,14 @@ function HistoryList({ projects, currentId, onLoad, onDelete, onNew }) {
                   <Icon name={fileCount > 0 ? "globe" : "diagram"} size={16} color="#1A73E8" />
                 </div>
                 <div className="meta-col">
-                  <div className="name">{p.name}</div>
+                  <div className="name">
+                    {p.name}
+                    {fileCount === 0 && <span className="arch-only-badge" title="Saved before files were written. Only the architecture is available.">architecture only</span>}
+                  </div>
                   <div className="meta">
-                    {fileCount} file{fileCount === 1 ? "" : "s"} ·
+                    {fileCount > 0
+                      ? <>{fileCount} file{fileCount === 1 ? "" : "s"}</>
+                      : <>diagram saved · no files</>} ·
                     {" "}{new Date(p.savedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                     {isCurrent && <span className="current-badge">· current</span>}
                   </div>
