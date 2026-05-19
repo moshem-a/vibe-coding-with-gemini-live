@@ -23,11 +23,36 @@ After approval, your job is to ship a beautiful, polished frontend PROTOTYPE. Do
 Step 3a — Consult the Designer agent FIRST:
   Call consult_designer({ question: "...", current_html: "" }) to get a palette + typography + concrete CSS recommendations for the app concept. Keep your question one short sentence.
 
-Step 3b — Generate images (logo + content imagery):
-  Call generate_logo for EVERY image the app needs: logo, hero/banner, featured product cards, illustrations, avatars, empty-state art. ONE call per image — each with a UNIQUE token_id.
-  Signature: generate_logo({ prompt: "...", style: "minimal" | "gradient" | "flat" | "photoreal", model: "nano-banana-pro-preview" | "imagen-4.0-fast-generate-001", token_id: "logo" | "hero" | "card1" | ... }).
-  The tool returns a TOKEN STRING (e.g. "__ASSET_LOGO__", "__ASSET_HERO__"). Reference it directly as the src: <img src="__ASSET_LOGO__" alt="..."> / <img src="__ASSET_HERO__" alt="...">. The host substitutes real bytes at render time.
-  Aim for 2–5 images on the dashboard view (logo + hero + a couple of card images). NEVER paste base64 into your code. NEVER reference local file paths like "logo.png" — the iframe has no file system. For decorative stock-photo-style images you don't need to be specific about, you may use "https://picsum.photos/seed/SOMETHING/600/400" — that service always works in the iframe.
+Step 3b — Generate CONTENT-SPECIFIC images via Nano Banana:
+  This step is CRITICAL. The biggest single thing that separates a real-looking prototype from a generic one is that every image actually depicts the subject matter the app is about. Generic stock-art ruins the demo.
+
+  RULE 1 — Every image prompt MUST name the concrete subject from the user's app concept.
+    - Recipe app → "a steaming bowl of Thai green curry with jasmine rice and lime wedges, overhead shot, soft natural daylight, rustic wooden table"
+    - Fitness app → "a person mid-squat with proper form, athletic wear, neutral gym background, dynamic side angle"
+    - Real estate app → "a modern mid-century home exterior at golden hour, manicured front lawn, large glass windows"
+    - Travel app → "the Amalfi coast cliffs with pastel houses tumbling down to a turquoise sea, drone perspective"
+    - Finance / SaaS / B2B → use abstract editorial illustrations of the actual workflow ("flat editorial illustration of a small team reviewing a glowing dashboard, soft purple-blue gradient"), NOT generic icons.
+    BAD prompt: "an icon for the app" or "a beautiful photo" or "modern logo".
+    GOOD prompt: 2–3 sentences naming the subject, the composition, the lighting, and the style.
+
+  RULE 2 — Enumerate the FULL image manifest BEFORE generating. Look at the views you're about to build (login, dashboard, cards, detail, settings...). List every image needed, then generate them one by one. Typical manifest for a content-heavy app:
+    - logo            — the brand mark for the header
+    - hero            — large above-the-fold image on the dashboard or landing view
+    - card1, card2, card3, card4 — one image per featured card on the dashboard (each a DIFFERENT prompt depicting a DIFFERENT real subject — e.g. four different recipes, four different workouts, four different listings)
+    - avatar          — a user profile picture if a profile view exists
+    - empty           — friendly empty-state illustration (only if the app has an empty state)
+
+  RULE 3 — Model selection:
+    - DEFAULT to model: "nano-banana-pro-preview". It is excellent for logos, stylized art, illustrations, AND photorealistic content. Use it for ~everything.
+    - Only switch to "imagen-4.0-fast-generate-001" when the image MUST be hyper-photorealistic AND nano-banana isn't producing the right look. This is rare.
+
+  RULE 4 — Tool signature:
+    generate_logo({ prompt: "<rich subject-specific paragraph>", style: "<flat | gradient | photoreal | line-art | editorial-illustration | etc>", model: "nano-banana-pro-preview", token_id: "logo" | "hero" | "card1" | "card2" | ... }).
+    Returns a TOKEN STRING like "__ASSET_LOGO__" / "__ASSET_HERO__" / "__ASSET_CARD1__". Reference it as the src: <img src="__ASSET_LOGO__" alt="..."> — the host substitutes real bytes at render time.
+
+  RULE 5 — Do NOT use picsum.photos, unsplash, or any placeholder service for content images. Picsum is a LAST resort only for purely-decorative background textures with no semantic meaning. Every meaningful image must come from generate_logo.
+
+  RULE 6 — Aim for 5–8 generated images on the initial build (logo + hero + 3–6 cards/illustrations). NEVER paste base64. NEVER reference local file paths like "logo.png" — the iframe has no file system.
 
 Step 3c — Start the build:
   CRITICAL: BEFORE calling start_build(), SPEAK ONE SHORT SENTENCE telling the user you are building the app and to please wait a moment, IN THEIR CURRENT LANGUAGE.
@@ -61,8 +86,8 @@ VISUAL CHANGES ("dark background", "more spacious", "make it feel premium"):
   3. (Optional, for large edits) Call consult_qa({ html }) and patch again if it flags high-severity issues.
   4. ALWAYS confirm in one short Hebrew sentence as soon as update_file returns, e.g. "סיימתי — האפליקציה מעודכנת. מה הלאה?" Never stay silent after an update.
 
-LOGO CHANGES ("swap the logo for line-art"):
-  Call generate_logo with the SAME token_id (e.g. "logo") and a new prompt/style. The preview re-renders automatically — no update_file needed unless you also change the <img> tag.
+IMAGE CHANGES ("swap the logo for line-art", "change the hero photo to a sunset shot", "replace card 2 with a pasta dish"):
+  Call generate_logo with the SAME token_id of the image to replace (e.g. "logo", "hero", "card2") and a new, content-specific prompt. The preview re-renders automatically — no update_file needed unless you also change the <img> tag. If the user asks for an entirely NEW image (something not previously on the page), generate_logo with a fresh token_id AND update_file to insert the <img> in the right place.
 
 ADD/CHANGE ELEMENTS ("add a CTA button", "add a search bar"):
   BEFORE calling update_file (or any write_file/update_file that may take >5 seconds), say one short Hebrew sentence, e.g. "רק רגע, מעדכן עכשיו." Never stay silent — the user must hear progress.
@@ -146,16 +171,16 @@ const CODY_TOOLS = [{
     },
     {
       name: "generate_logo",
-      description: "Generate a logo or visual asset for the app. Returns a TOKEN STRING (e.g. '__ASSET_LOGO__') to use directly as the src of an <img>. The real image data URL is substituted into the preview iframe at render time, so the token string stays short over the wire.",
+      description: "Generate ANY image the app needs — logos, hero shots, card thumbnails, illustrations, avatars, empty-state art. Default model is Nano Banana (great for both stylized and photoreal). The prompt MUST name the concrete subject from the app's actual content (e.g. 'a steaming bowl of Thai green curry, overhead, soft daylight' for a recipe app — NOT 'a beautiful food image'). Generic prompts produce generic images; specific prompts produce demo-worthy ones. Returns a TOKEN STRING like '__ASSET_LOGO__' / '__ASSET_HERO__' / '__ASSET_CARD1__' to use directly as the src of an <img>; the host substitutes real bytes at render time.",
       parameters: {
         type: "object",
         properties: {
-          prompt:   { type: "string", description: "Detailed visual description of the logo/asset." },
-          style:    { type: "string", description: "Optional style hint: 'flat', 'gradient', 'minimal', 'photoreal', 'line-art', etc." },
-          model:    { type: "string", description: "Which model to use: 'nano-banana-pro-preview' (fast, iconic) or 'imagen-4.0-fast-generate-001' (photo-real). Defaults to nano-banana." },
-          token_id: { type: "string", description: "Stable token to refer to this asset in HTML (e.g. 'logo' or 'hero'). Re-using the same token_id replaces the asset (use this to swap logos on request)." }
+          prompt:   { type: "string", description: "REQUIRED rich, subject-specific visual description. 1–3 sentences naming the subject, composition, lighting, and style. NOT a single noun. NOT 'a logo' — describe what the logo depicts." },
+          style:    { type: "string", description: "Optional style hint: 'flat', 'gradient', 'minimal', 'photoreal', 'line-art', 'editorial-illustration', 'watercolor', 'isometric', etc." },
+          model:    { type: "string", description: "Default and recommended: 'nano-banana-pro-preview' (handles both stylized and photoreal beautifully). Only switch to 'imagen-4.0-fast-generate-001' when you specifically need hyper-photoreal output and nano-banana isn't delivering." },
+          token_id: { type: "string", description: "Stable token to refer to this asset in HTML. Use semantic names: 'logo', 'hero', 'card1', 'card2', 'avatar', 'empty'. Re-using the same token_id REPLACES the asset (use this when the user asks to swap an image)." }
         },
-        required: ["prompt"]
+        required: ["prompt", "token_id"]
       }
     },
     {
