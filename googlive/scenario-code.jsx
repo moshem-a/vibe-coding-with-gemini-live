@@ -626,7 +626,8 @@ function ScenarioCode({ apiKey, onExit }) {
               apiKey,
               prompt: fc.args.prompt,
               style: fc.args.style,
-              model: fc.args.model
+              model: fc.args.model,
+              tokenId
             });
             setAssets(prev => { const n = new Map(prev); n.set(placeholder, dataUrl); return n; });
             // If the preview is already live, bump the iframe key so the new asset shows up.

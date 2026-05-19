@@ -149,13 +149,31 @@
 
   // ---- Image generation -----------------------------------------------------
 
-  function _enrichLogoPrompt(prompt, style) {
-    const stylePart = style ? "Style: " + style + ". " : "";
+  // Only LOGOS get logo styling. Content images (hero, card1, avatar, …) keep
+  // their subject-specific prompt intact and just receive a light quality nudge.
+  // Forcing "vector-style app logo" on every image was producing icon-style
+  // car logos when the model asked for a photo of a car, etc.
+  function _enrichPrompt(prompt, style, tokenId) {
+    const stylePart = style ? " Style: " + style + "." : "";
+    const id = (tokenId || "").toLowerCase();
+    const isLogo = id === "logo" || id === "brand" || id === "icon";
+    if (isLogo) {
+      return (
+        prompt + "." + stylePart +
+        " Square app logo / brand mark, centered composition on transparent or solid background, no text unless requested, suitable for a web app header."
+      );
+    }
+    if (id === "avatar") {
+      return (
+        prompt + "." + stylePart +
+        " Square portrait, head-and-shoulders framing, natural lighting, suitable for a user profile picture."
+      );
+    }
+    // Generic content image (hero / card / illustration / empty / etc).
+    // Trust the model's subject-specific prompt; only nudge quality.
     return (
-      prompt +
-      ". " +
-      stylePart +
-      "Vector-style app logo, transparent or solid background, centered, no text unless requested, suitable for a web app header."
+      prompt + "." + stylePart +
+      " High quality, sharp focus, professional composition, no text overlays, no watermarks. Render exactly the subject described — do NOT substitute a logo or icon."
     );
   }
 
@@ -200,10 +218,10 @@
     return "data:" + mime + ";base64," + pred.bytesBase64Encoded;
   }
 
-  async function generateImage({ apiKey, prompt, style, model }) {
+  async function generateImage({ apiKey, prompt, style, model, tokenId }) {
     const key = _getApiKey(apiKey);
     if (!key) throw new Error("generateImage: apiKey is required");
-    const enriched = _enrichLogoPrompt(prompt, style);
+    const enriched = _enrichPrompt(prompt, style, tokenId);
     const chosen = (model || "nano-banana-pro-preview").replace(/^models\//, "");
     if (chosen.startsWith("imagen-4")) {
       return _generateImagen4({ apiKey: key, prompt: enriched });

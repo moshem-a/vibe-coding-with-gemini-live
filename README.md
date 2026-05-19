@@ -9,7 +9,7 @@ WebSocket. Speak. The model thinks, speaks back, *and drives the UI* through
 tool-calls in real time.
 
 **Live demo:** https://googlive-1069070785804.us-central1.run.app
-**Deck explaining how it works:** [`slides.html`](./slides.html)
+**Deck:** [`slides.html`](./slides.html) (interactive, in-browser) · [`slides.pptx`](./slides.pptx) (editable PowerPoint / Google Slides)
 
 ---
 
