@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
   :root {
     --gc-blue: #1a73e8;
@@ -173,6 +174,37 @@
     overflow: auto;
     max-height: 60vh;
   }
+
+  /* Mermaid diagrams — matched to the Pair-with-Gemi architecture canvas */
+  .mermaid-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 28px 32px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: auto;
+    max-height: 64vh;
+  }
+  .mermaid {
+    font-family: "Google Sans", sans-serif !important;
+    width: 100%;
+    max-width: 1100px;
+  }
+  /* Override Mermaid node colors to GCP palette */
+  .mermaid .node rect,
+  .mermaid .node polygon,
+  .mermaid .node path { stroke-width: 1.5px !important; }
+  .mermaid .cluster rect {
+    fill: rgba(255,255,255,.02) !important;
+    stroke: rgba(255,255,255,.10) !important;
+    stroke-dasharray: 4 4 !important;
+  }
+  .mermaid .cluster-label .nodeLabel { color: var(--text-dim) !important; font-size: 12px !important; }
+  .mermaid .edgeLabel { background-color: var(--bg) !important; color: var(--text-dim) !important; padding: 2px 6px; }
+  .mermaid .edgeLabel rect { fill: var(--bg) !important; }
+  .mermaid .flowchart-link { stroke: rgba(255,255,255,.35) !important; stroke-width: 1.5px !important; }
+  .mermaid .marker { fill: rgba(255,255,255,.55) !important; stroke: rgba(255,255,255,.55) !important; }
+  .mermaid .nodeLabel { color: #fff !important; }
 
   /* timeline */
   .timeline {
@@ -394,33 +426,67 @@
     <section class="slide">
       <div class="eyebrow">How it's wired</div>
       <h2>One static frontend. Three model endpoints.</h2>
-      <pre class="diagram">
-                ┌──────────────────────────────────────────────────────────┐
-                │  Browser  (Cloud Run · Nginx · static React + Babel)     │
-                │                                                          │
-   user voice ──┼─▶ MicCapture (16 kHz PCM AudioWorklet) ──┐               │
-                │                                          ▼               │
-                │                              ┌───────────────────────┐   │
-   model voice ◀┼── AudioPlayer (24 kHz) ◀─────│ Gemini Live WebSocket │   │
-                │                              │ gemini-3.1-flash-live │   │
-                │   tool-calls (JSON) ◀────────│ -preview · "Puck" he-IL│  │
-                │                              └───────────────────────┘   │
-                │           │                                              │
-                │           ├──▶ React state → renders diagram / code /    │
-                │           │     preview iframe / agent-activity rail     │
-                │           │                                              │
-                │           ├──▶ generate_logo  ─▶ Nano Banana / Imagen 4  │
-                │           │                                              │
-                │           └──▶ consult_designer / consult_qa /           │
-                │                consult_developer                         │
-                │                     │                                    │
-                │                     ▼                                    │
-                │           gemini-3.1-pro-preview (browser-direct)        │
-                │           role-specific prompts · JSON schemas           │
-                └──────────────────────────────────────────────────────────┘</pre>
+      <div class="mermaid-wrap">
+        <pre class="mermaid">
+flowchart LR
+  User((🎙️ User<br/>speaks))
+
+  subgraph Browser["Browser — Cloud Run · Nginx · static React"]
+    direction TB
+    Mic["MicCapture<br/><span style='font-size:11px;opacity:.75'>16 kHz PCM · AudioWorklet</span>"]
+    React["React App<br/><span style='font-size:11px;opacity:.75'>4 scenarios · tool-call handlers</span>"]
+    Player["AudioPlayer<br/><span style='font-size:11px;opacity:.75'>24 kHz playback</span>"]
+    Iframe["Preview Iframe<br/><span style='font-size:11px;opacity:.75'>multi-view SPA · postMessage</span>"]
+    IDB[("IndexedDB<br/><span style='font-size:11px;opacity:.75'>project history</span>")]
+  end
+
+  Live{{"Gemini Live · WebSocket<br/>gemini-3.1-flash-live-preview<br/><span style='font-size:11px;opacity:.75'>voice: Puck · he-IL</span>"}}
+
+  subgraph Agents["Sub-agents · gemini-3.1-pro-preview"]
+    direction TB
+    Designer["Designer"]
+    QA["QA"]
+    Dev["Developer"]
+  end
+
+  subgraph Img["Image generation"]
+    direction TB
+    Nano["Nano Banana Pro"]
+    Img4["Imagen 4 Fast"]
+  end
+
+  User -- audio --> Mic
+  Mic -- PCM frames --> Live
+  Live -- audio --> Player
+  Player -- voice out --> User
+  Live <-. tool-calls / responses .-> React
+  React -- consult_* --> Designer
+  React -- consult_* --> QA
+  React -- consult_* --> Dev
+  React -- generate_logo --> Nano
+  React -- generate_logo --> Img4
+  React -- write_file / show_preview --> Iframe
+  Iframe -. navigate / back .-> React
+  React <-. auto-save / load .-> IDB
+
+  classDef user fill:#1A73E8,stroke:#1A6CDB,color:#fff
+  classDef live fill:#9B72CB,stroke:#7E55B0,color:#fff
+  classDef host fill:#23272f,stroke:#FBBC04,color:#fff
+  classDef agent fill:#23272f,stroke:#D96570,color:#fff
+  classDef img fill:#23272f,stroke:#34A853,color:#fff
+  classDef store fill:#23272f,stroke:#9B72CB,color:#fff
+  class User user
+  class Live live
+  class Mic,React,Player,Iframe host
+  class Designer,QA,Dev agent
+  class Nano,Img4 img
+  class IDB store
+        </pre>
+      </div>
       <div class="callout">
-        No bundler. No backend round-trip. The whole demo is a single Nginx
-        container serving static React + Babel + a thin WebSocket client.
+        No bundler. No backend round-trip. A single Nginx container serves
+        static React + Babel and talks WebSocket to the model — every other
+        capability is a tool-call routed from React state.
       </div>
     </section>
 
@@ -507,7 +573,63 @@
       </div>
     </section>
 
-    <!-- 8. Optional ADK / Agent Engine path -->
+    <!-- 8. Agent topology -->
+    <section class="slide">
+      <div class="eyebrow">How they talk</div>
+      <h2>Live API as orchestrator. Specialists on demand.</h2>
+      <div class="mermaid-wrap">
+        <pre class="mermaid">
+flowchart LR
+  User((🎙️ User))
+  Live{{"Gemi · Live API<br/>gemini-3.1-flash-live-preview"}}
+  Iframe["Preview iframe<br/><span style='font-size:11px;opacity:.75'>multi-view SPA</span>"]
+
+  User <-. voice .-> Live
+
+  Live -- "consult_designer<br/><span style='font-size:11px;opacity:.7'>{question, current_html}</span>" --> Designer
+  Designer -- "<span style='font-size:11px;opacity:.7'>{palette, typography,<br/>recommendations, css_snippet}</span>" --> Live
+
+  Live -- "consult_qa<br/><span style='font-size:11px;opacity:.7'>{html}</span>" --> QA
+  QA -- "<span style='font-size:11px;opacity:.7'>{issues[], ok}</span>" --> Live
+
+  Live -- "consult_developer<br/><span style='font-size:11px;opacity:.7'>{task, current_code}</span>" --> Dev
+  Dev -- "<span style='font-size:11px;opacity:.7'>{approach, code_snippet,<br/>considerations, risks}</span>" --> Live
+
+  Live -- "generate_logo<br/><span style='font-size:11px;opacity:.7'>{prompt, style, token_id}</span>" --> Imgen
+  Imgen -- "<span style='font-size:11px;opacity:.7'>data URL<br/>(swapped at render time)</span>" --> Live
+
+  Live -- "write_file · update_file · show_preview" --> Iframe
+  Live -- "navigate_preview" --> Iframe
+
+  Designer["🎨 Designer agent<br/><span style='font-size:11px;opacity:.7'>gemini-3.1-pro-preview</span>"]
+  QA["🛡️ QA agent<br/><span style='font-size:11px;opacity:.7'>gemini-3.1-pro-preview</span>"]
+  Dev["⚙️ Developer agent<br/><span style='font-size:11px;opacity:.7'>gemini-3.1-pro-preview</span>"]
+  Imgen["🖼️ Image Generator<br/><span style='font-size:11px;opacity:.7'>Nano Banana · Imagen 4</span>"]
+
+  classDef user fill:#1A73E8,stroke:#1A6CDB,color:#fff
+  classDef live fill:#9B72CB,stroke:#7E55B0,color:#fff
+  classDef designer fill:#23272f,stroke:#D96570,color:#fff
+  classDef qa fill:#23272f,stroke:#FBBC04,color:#fff
+  classDef dev fill:#23272f,stroke:#34A853,color:#fff
+  classDef img fill:#23272f,stroke:#1A73E8,color:#fff
+  classDef iframe fill:#23272f,stroke:#9B72CB,color:#fff
+  class User user
+  class Live live
+  class Designer designer
+  class QA qa
+  class Dev dev
+  class Imgen img
+  class Iframe iframe
+        </pre>
+      </div>
+      <div class="callout purple">
+        The Live API is the only thing the user talks to. Sub-agents are
+        single-shot JSON calls Gemi fans out and folds back in — they show up
+        as cards in the Agent Activity rail with the engine session link.
+      </div>
+    </section>
+
+    <!-- 9. Optional ADK / Agent Engine path -->
     <section class="slide">
       <div class="eyebrow">Optional · Admin observability</div>
       <h2>Same agents, on Vertex AI Agent Engine.</h2>
@@ -680,13 +802,32 @@ previewIframe.contentWindow.postMessage(
   <div class="chrome-bottom">
     <div class="nav">
       <button id="prev">← Prev</button>
-      <span id="counter" style="color: var(--text-faint); font-size: 12px;">1 / 13</span>
+      <span id="counter" style="color: var(--text-faint); font-size: 12px;">1 / 14</span>
       <button id="next">Next →</button>
     </div>
     <div style="font-size: 11px; color: var(--text-faint);">← → / Space to navigate · F for fullscreen</div>
   </div>
 
 <script>
+if (window.mermaid) {
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "base",
+    fontFamily: "Google Sans, system-ui, sans-serif",
+    themeVariables: {
+      background: "#1a1d23",
+      primaryColor: "#23272f",
+      primaryTextColor: "#e8eaed",
+      primaryBorderColor: "#9B72CB",
+      lineColor: "rgba(255,255,255,.45)",
+      tertiaryColor: "#1a1d23",
+      clusterBkg: "rgba(255,255,255,.02)",
+      clusterBorder: "rgba(255,255,255,.18)",
+      edgeLabelBackground: "#0e1014"
+    },
+    flowchart: { curve: "basis", htmlLabels: true, padding: 14 }
+  });
+}
 (function () {
   const slides = Array.from(document.querySelectorAll('.slide'));
   const counter = document.getElementById('counter');

@@ -215,19 +215,93 @@ const PHASES = [
   { id: "preview",      label: "Preview" }
 ];
 
-const PROJECTS_KEY = "gemi.projects.v1";
+// Project persistence — IndexedDB.
+// We previously used localStorage but each entry contains inline base64
+// data URLs for generated logos (often ~300KB each). With even a couple
+// of projects, a save would silently throw QuotaExceededError and the
+// project would never make it across a reload. IndexedDB has ~hundreds
+// of MB headroom so saves are reliable.
+const PROJECTS_KEY = "gemi.projects.v1"; // legacy localStorage key (one-time migration)
+const IDB_NAME = "gemi-projects";
+const IDB_STORE = "projects";
 
-function loadSavedProjects() {
-  try {
-    const raw = localStorage.getItem(PROJECTS_KEY);
-    if (!raw) return [];
-    const list = JSON.parse(raw);
-    return Array.isArray(list) ? list : [];
-  } catch { return []; }
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 
-function persistSavedProjects(list) {
-  try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(list.slice(0, 30))); } catch {}
+async function idbLoadAll() {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readonly");
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const list = (req.result || []).slice();
+        list.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+        resolve(list);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) {
+    console.warn("[projects] idbLoadAll failed", e);
+    return [];
+  }
+}
+
+async function idbPut(entry) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).put(entry);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn("[projects] idbPut failed", e);
+  }
+}
+
+async function idbDelete(id) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn("[projects] idbDelete failed", e);
+  }
+}
+
+// One-time: migrate any legacy localStorage projects into IndexedDB so the
+// user doesn't lose work that was saved before this change. Best-effort.
+async function migrateLegacyProjects() {
+  try {
+    const raw = localStorage.getItem(PROJECTS_KEY);
+    if (!raw) return;
+    const list = JSON.parse(raw);
+    if (Array.isArray(list)) {
+      for (const entry of list) {
+        if (entry && entry.id) await idbPut(entry);
+      }
+    }
+    localStorage.removeItem(PROJECTS_KEY);
+  } catch { /* ignore */ }
 }
 
 function deriveProjectName(architectures, files) {
@@ -347,10 +421,10 @@ function ScenarioCode({ apiKey, onExit }) {
   // History shows previously-built projects — auto-saved, click to reload.
   // Transcript shows the raw Hebrew transcription (noisy on stage, so hidden by default).
   const [leftTab, setLeftTab] = useState("history");
-  // Saved projects persist across reloads (localStorage). Each entry:
+  // Saved projects persist across reloads (IndexedDB). Each entry:
   // { id, name, savedAt, phase, files, assetsList: [[token, dataUrl]],
   //   architectures, selectedArchVer }
-  const [savedProjects, setSavedProjects] = useState(() => loadSavedProjects());
+  const [savedProjects, setSavedProjects] = useState([]);
   const [currentProjectId, setCurrentProjectId] = useState(null);
 
   const micRef = useRef(null);
@@ -652,6 +726,16 @@ function ScenarioCode({ apiKey, onExit }) {
   };
   const previewSrc = useMemo(() => buildPreviewSrcDoc(files, assets), [files, assets]);
 
+  // One-time: migrate any legacy localStorage projects into IndexedDB, then
+  // hydrate the History panel from IndexedDB.
+  useEffect(() => {
+    (async () => {
+      await migrateLegacyProjects();
+      const list = await idbLoadAll();
+      setSavedProjects(list);
+    })();
+  }, []);
+
   // Auto-save the current project as soon as there are any files OR an approved
   // architecture. Re-saves on every mutation so the latest state is always
   // recoverable across page reloads. Uses a ref for the id to avoid race
@@ -679,10 +763,10 @@ function ScenarioCode({ apiKey, onExit }) {
     };
     setSavedProjects(prev => {
       const without = prev.filter(p => p.id !== id);
-      const next = [entry, ...without].slice(0, 30);
-      persistSavedProjects(next);
-      return next;
+      return [entry, ...without];
     });
+    // Fire-and-forget — IDB is async but we don't need to await.
+    idbPut(entry);
   }, [phase, files, assets, architectures, selectedArchVer]); // eslint-disable-line
 
   const loadProject = (id) => {
@@ -706,11 +790,8 @@ function ScenarioCode({ apiKey, onExit }) {
 
   const deleteSavedProject = (id, e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
-    setSavedProjects(prev => {
-      const next = prev.filter(p => p.id !== id);
-      persistSavedProjects(next);
-      return next;
-    });
+    setSavedProjects(prev => prev.filter(p => p.id !== id));
+    idbDelete(id);
     if (currentProjectId === id) {
       setCurrentProjectId(null);
       projectIdRef.current = null;

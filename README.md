@@ -54,31 +54,114 @@ The whole flow is driven by **function-calling tools** exposed on the Live API:
 
 ## Architecture
 
+Same Mermaid-flowchart styling as the architecture diagrams Gemi sketches
+inside the Pair-with-Gemi scenario — one static frontend, three model
+endpoints, every capability is a tool-call routed from React state.
+
+```mermaid
+flowchart LR
+  User((🎙️ User<br/>speaks))
+
+  subgraph Browser["Browser — Cloud Run · Nginx · static React"]
+    direction TB
+    Mic["MicCapture<br/>16 kHz PCM · AudioWorklet"]
+    React["React App<br/>4 scenarios · tool-call handlers"]
+    Player["AudioPlayer<br/>24 kHz playback"]
+    Iframe["Preview Iframe<br/>multi-view SPA · postMessage"]
+    IDB[("IndexedDB<br/>project history")]
+  end
+
+  Live{{"Gemini Live · WebSocket<br/>gemini-3.1-flash-live-preview<br/>voice: Puck · he-IL"}}
+
+  subgraph Agents["Sub-agents · gemini-3.1-pro-preview"]
+    direction TB
+    Designer["Designer"]
+    QA["QA"]
+    Dev["Developer"]
+  end
+
+  subgraph Img["Image generation"]
+    direction TB
+    Nano["Nano Banana Pro"]
+    Img4["Imagen 4 Fast"]
+  end
+
+  User -- audio --> Mic
+  Mic -- PCM frames --> Live
+  Live -- audio --> Player
+  Player -- voice out --> User
+  Live <-. tool-calls / responses .-> React
+  React -- consult_* --> Designer
+  React -- consult_* --> QA
+  React -- consult_* --> Dev
+  React -- generate_logo --> Nano
+  React -- generate_logo --> Img4
+  React -- write_file / show_preview --> Iframe
+  Iframe -. navigate / back .-> React
+  React <-. auto-save / load .-> IDB
+
+  classDef user fill:#1A73E8,stroke:#1A6CDB,color:#fff
+  classDef live fill:#9B72CB,stroke:#7E55B0,color:#fff
+  classDef host fill:#23272f,stroke:#FBBC04,color:#fff
+  classDef agent fill:#23272f,stroke:#D96570,color:#fff
+  classDef img fill:#23272f,stroke:#34A853,color:#fff
+  classDef store fill:#23272f,stroke:#9B72CB,color:#fff
+  class User user
+  class Live live
+  class Mic,React,Player,Iframe host
+  class Designer,QA,Dev agent
+  class Nano,Img4 img
+  class IDB store
 ```
-                ┌──────────────────────────────────────────────────────────┐
-                │  Browser (Cloud Run, Nginx-served static React)          │
-                │                                                          │
-   user voice ──┼─▶ MicCapture (16 kHz PCM AudioWorklet) ──┐               │
-                │                                          ▼               │
-                │                              ┌───────────────────────┐   │
-   model voice ◀┼── AudioPlayer (24 kHz) ◀─────│ Gemini Live WebSocket │   │
-                │                              │ gemini-3.1-flash-live │   │
-                │   tool-calls (JSON) ◀────────│ -preview              │   │
-                │                              └───────────────────────┘   │
-                │           │                                              │
-                │           ├──▶ React state → renders diagram / code /    │
-                │           │     preview iframe / agent-activity rail     │
-                │           │                                              │
-                │           ├──▶ generate_logo  ─▶ Nano Banana / Imagen 4  │
-                │           │                                              │
-                │           └──▶ consult_designer / consult_qa /           │
-                │                consult_developer                         │
-                │                     │                                    │
-                │                     ▼                                    │
-                │           gemini-3.1-pro-preview (browser-direct)        │
-                │           with role-specific system prompts +            │
-                │           responseMimeType: "application/json"           │
-                └──────────────────────────────────────────────────────────┘
+
+### Agent topology
+
+The Live API is the only thing the user talks to. Sub-agents are single-shot
+JSON calls Gemi fans out and folds back in — each one shows up as a card in
+the Agent Activity rail with timing + a deep link to its Agent Engine session.
+
+```mermaid
+flowchart LR
+  User((🎙️ User))
+  Live{{"Gemi · Live API"}}
+  Iframe["Preview iframe<br/>multi-view SPA"]
+
+  User <-. voice .-> Live
+
+  Live -- "consult_designer<br/>{question, current_html}" --> Designer
+  Designer -- "{palette, typography,<br/>recommendations, css_snippet}" --> Live
+
+  Live -- "consult_qa<br/>{html}" --> QA
+  QA -- "{issues[], ok}" --> Live
+
+  Live -- "consult_developer<br/>{task, current_code}" --> Dev
+  Dev -- "{approach, snippet,<br/>considerations, risks}" --> Live
+
+  Live -- "generate_logo<br/>{prompt, style, token_id}" --> Imgen
+  Imgen -- "data URL<br/>(swapped at render time)" --> Live
+
+  Live -- "write_file · update_file · show_preview" --> Iframe
+  Live -- "navigate_preview · postMessage" --> Iframe
+
+  Designer["🎨 Designer agent<br/>gemini-3.1-pro-preview"]
+  QA["🛡️ QA agent<br/>gemini-3.1-pro-preview"]
+  Dev["⚙️ Developer agent<br/>gemini-3.1-pro-preview"]
+  Imgen["🖼️ Image Generator<br/>Nano Banana · Imagen 4"]
+
+  classDef user fill:#1A73E8,stroke:#1A6CDB,color:#fff
+  classDef live fill:#9B72CB,stroke:#7E55B0,color:#fff
+  classDef designer fill:#23272f,stroke:#D96570,color:#fff
+  classDef qa fill:#23272f,stroke:#FBBC04,color:#fff
+  classDef dev fill:#23272f,stroke:#34A853,color:#fff
+  classDef img fill:#23272f,stroke:#1A73E8,color:#fff
+  classDef iframe fill:#23272f,stroke:#9B72CB,color:#fff
+  class User user
+  class Live live
+  class Designer designer
+  class QA qa
+  class Dev dev
+  class Imgen img
+  class Iframe iframe
 ```
 
 Image generation and the sub-agents are **browser-direct** calls to
