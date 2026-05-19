@@ -1202,6 +1202,7 @@ button { font-family: inherit; cursor: pointer; }
   border-radius: var(--r-pill);
   background: var(--border-soft);
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 .agent-card .dot {
   width: 6px; height: 6px; border-radius: 50%;
@@ -1258,65 +1259,143 @@ button { font-family: inherit; cursor: pointer; }
   .agent-rail { width: auto; border-left: none; border-top: 1px solid var(--border-soft); max-height: 240px; }
 }
 
-/* ─── Transcript toggle (Pair with Gemi) ────────────── */
-.transcript-toggle-wrap {
-  flex: 1;
-  display: flex; flex-direction: column;
-  min-height: 0;
+/* ─── Pair with Gemi · Left-panel tabs (History / Transcript) ─── */
+.left-tabs {
+  display: flex;
   border-top: 1px solid var(--border-soft);
-}
-.transcript-toggle {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 20px;
-  background: var(--surface);
-  border: none;
   border-bottom: 1px solid var(--border-soft);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.left-tabs .tab {
+  flex: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: none;
+  border: none;
+  padding: 10px 12px;
   font-size: 12px; font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  text-align: left;
+  border-bottom: 2px solid transparent;
+  transition: background .15s, color .15s, border-color .15s;
 }
-.transcript-toggle:hover { background: var(--surface-2); color: var(--text); }
-.transcript-toggle-wrap .transcript {
+.left-tabs .tab:hover { background: var(--surface-2); color: var(--text); }
+.left-tabs .tab.active {
+  color: var(--gc-blue-600);
+  border-bottom-color: var(--gc-blue);
+  background: var(--gc-blue-50);
+}
+.left-tabs .tab .count {
+  background: var(--surface-2);
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px; font-weight: 600;
+  color: var(--text-secondary);
+}
+.left-tabs .tab.active .count {
+  background: rgba(26,115,232,.18);
+  color: var(--gc-blue-600);
+}
+.left-tab-body {
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
+}
+.left-tab-body .transcript {
   padding: 16px 20px;
 }
 
-/* ─── Projects history modal ────────────────────────── */
-.projects-modal { width: 560px; max-width: 92vw; }
-.projects-list {
-  max-height: 360px;
-  overflow-y: auto;
-  margin: 4px -4px 12px;
-  display: flex; flex-direction: column; gap: 6px;
+/* ─── Pair with Gemi · History pane (saved projects) ─── */
+.history-pane {
+  display: flex; flex-direction: column;
 }
-.project-row {
-  display: flex; align-items: center; gap: 12px;
+.history-actions {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  display: flex; gap: 8px;
+}
+.history-actions .btn-sm {
+  font-size: 11px; padding: 5px 10px;
+}
+.history-list {
+  display: flex; flex-direction: column;
+  padding: 8px;
+  gap: 6px;
+}
+.history-row {
+  display: flex; align-items: center; gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
   border-radius: var(--r-md);
   background: var(--surface);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .1s;
 }
-.project-row.current {
+.history-row:hover {
   border-color: var(--gc-blue);
   background: var(--gc-blue-50);
 }
-.project-row .thumb {
-  width: 36px; height: 36px;
+.history-row.current {
+  border-color: var(--gc-blue);
+  background: var(--gc-blue-50);
+  cursor: default;
+}
+.history-row .thumb {
+  width: 32px; height: 32px;
   border-radius: var(--r-sm);
-  background: rgba(26,115,232,.10);
+  background: rgba(26,115,232,.12);
   display: grid; place-items: center;
   flex-shrink: 0;
 }
-.project-row .meta-col {
+.history-row .meta-col {
   flex: 1; min-width: 0;
 }
-.project-row .name {
-  font-weight: 500; font-size: 14px;
+.history-row .name {
+  font-weight: 500; font-size: 13px;
+  color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.project-row .meta {
-  font-size: 11px; color: var(--text-tertiary);
+.history-row .meta {
+  font-size: 10px; color: var(--text-tertiary);
   margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.history-row .current-badge {
+  margin-left: 6px;
+  color: var(--gc-green);
+  font-weight: 600;
+}
+.history-row .del {
+  background: transparent;
+  border: none;
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.history-row .del:hover {
+  background: rgba(234,67,53,.10);
+  color: var(--gc-red);
+}
+.history-empty {
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--text-tertiary);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.history-empty .ic {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: rgba(26,115,232,.10);
+  display: grid; place-items: center;
+  margin-bottom: 4px;
+}
+.history-empty .t {
+  font-size: 14px; font-weight: 500; color: var(--text-secondary);
+}
+.history-empty .s {
+  font-size: 12px; line-height: 1.5;
+  max-width: 240px;
 }

@@ -343,14 +343,14 @@ function ScenarioCode({ apiKey, onExit }) {
   // agentActivity: [{ id, agent, status, startedAt, finishedAt, summary, request, response, engineResource }]
   const [agentActivity, setAgentActivity] = useState([]);
   const [agentRailOpen, setAgentRailOpen] = useState(true);
-  // Transcript is hidden by default — transcription is noisy and distracts on stage.
-  // Click the toggle to expand and read the Hebrew transcript.
-  const [showTranscript, setShowTranscript] = useState(false);
+  // Left-side panel switches between History (default) and Transcript.
+  // History shows previously-built projects — auto-saved, click to reload.
+  // Transcript shows the raw Hebrew transcription (noisy on stage, so hidden by default).
+  const [leftTab, setLeftTab] = useState("history");
   // Saved projects persist across reloads (localStorage). Each entry:
   // { id, name, savedAt, phase, files, assetsList: [[token, dataUrl]],
-  //   architectures, selectedArchVer, turnsCount }
+  //   architectures, selectedArchVer }
   const [savedProjects, setSavedProjects] = useState(() => loadSavedProjects());
-  const [projectsOpen, setProjectsOpen] = useState(false);
   const [currentProjectId, setCurrentProjectId] = useState(null);
 
   const micRef = useRef(null);
@@ -358,6 +358,9 @@ function ScenarioCode({ apiKey, onExit }) {
   const userBufRef = useRef("");
   const aiBufRef = useRef("");
   const previewIframeRef = useRef(null);
+  // Stable id for the *current* in-progress project so saves don't double-write
+  // under different randomly-generated ids while React batches state updates.
+  const projectIdRef = useRef(null);
   const [, force] = useState(0);
 
   // Helpers for agent activity cards
@@ -475,7 +478,7 @@ function ScenarioCode({ apiKey, onExit }) {
           pushAgentActivity({
             id: cardId, agent: "logo", status: "running",
             startedAt: Date.now(),
-            summary: `Generating ${tokenId} (${fc.args.model || "nano-banana"})`,
+            summary: `Image Generator · "${tokenId}" (${fc.args.model || "nano-banana"})`,
             request: fc.args
           });
           // Only flip to splash if we're still in the build phase (avoid clobbering
@@ -495,7 +498,7 @@ function ScenarioCode({ apiKey, onExit }) {
             }
             updateAgentActivity(cardId, {
               status: "done", finishedAt: Date.now(),
-              summary: `Logo "${tokenId}" ready`,
+              summary: `Image Generator · "${tokenId}" ready`,
               response: { token: placeholder, mimeType: "image/png" }
             });
             if (phase === "building") setUiGenerationStatus("writing-ui");
@@ -507,7 +510,7 @@ function ScenarioCode({ apiKey, onExit }) {
             console.error("generate_logo failed:", err);
             updateAgentActivity(cardId, {
               status: "error", finishedAt: Date.now(),
-              summary: "Logo generation failed",
+              summary: "Image Generator failed",
               response: { error: String(err) }
             });
             responses.push({
@@ -649,13 +652,21 @@ function ScenarioCode({ apiKey, onExit }) {
   };
   const previewSrc = useMemo(() => buildPreviewSrcDoc(files, assets), [files, assets]);
 
-  // Auto-save the current project once the preview is live. Re-saves on every
-  // file/asset/architecture mutation so the latest state is always recoverable.
+  // Auto-save the current project as soon as there are any files OR an approved
+  // architecture. Re-saves on every mutation so the latest state is always
+  // recoverable across page reloads. Uses a ref for the id to avoid race
+  // conditions where successive effect fires would mint different random ids
+  // before the state update propagates.
   useEffect(() => {
-    if (phase !== "preview") return;
-    if (files.length === 0) return;
-    const id = currentProjectId || `proj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    if (!currentProjectId) setCurrentProjectId(id);
+    const hasFiles = files.length > 0;
+    const hasArch = architectures.length > 0;
+    if (!hasFiles && !hasArch) return;
+    if (phase === "discovery" && !hasFiles) return; // skip empty discovery sessions
+    if (!projectIdRef.current) {
+      projectIdRef.current = `proj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setCurrentProjectId(projectIdRef.current);
+    }
+    const id = projectIdRef.current;
     const entry = {
       id,
       name: deriveProjectName(architectures, files),
@@ -682,23 +693,45 @@ function ScenarioCode({ apiKey, onExit }) {
     setArchitectures(p.architectures || []);
     setSelectedArchVer(p.selectedArchVer ?? null);
     setPhase(p.phase || "preview");
-    setActiveTab("preview");
+    setActiveTab((p.files || []).some(f => /index\.html$/i.test(f.filename)) ? "preview" : "architecture");
     setActiveFile((p.files && p.files[0] && p.files[0].filename) || null);
     setFileHistory(new Map((p.files || []).map(f => [f.filename, [{ version: 1, timestamp: p.savedAt || Date.now(), content: f.content, summary: "loaded from saved project" }]])));
     setViewingVersion(null);
-    setUiGenerationStatus("ready");
+    setUiGenerationStatus((p.files || []).some(f => /index\.html$/i.test(f.filename)) ? "ready" : "idle");
+    setAgentActivity([]);
+    projectIdRef.current = id;
     setCurrentProjectId(id);
-    setProjectsOpen(false);
     setPreviewKey(k => k + 1);
   };
 
-  const deleteSavedProject = (id) => {
+  const deleteSavedProject = (id, e) => {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
     setSavedProjects(prev => {
       const next = prev.filter(p => p.id !== id);
       persistSavedProjects(next);
       return next;
     });
-    if (currentProjectId === id) setCurrentProjectId(null);
+    if (currentProjectId === id) {
+      setCurrentProjectId(null);
+      projectIdRef.current = null;
+    }
+  };
+
+  const startNewProject = () => {
+    setFiles([]);
+    setAssets(new Map());
+    setArchitectures([]);
+    setSelectedArchVer(null);
+    setActiveFile(null);
+    setFileHistory(new Map());
+    setViewingVersion(null);
+    setAgentActivity([]);
+    setPhase("discovery");
+    setActiveTab("architecture");
+    setUiGenerationStatus("idle");
+    projectIdRef.current = null;
+    setCurrentProjectId(null);
+    setPreviewKey(k => k + 1);
   };
 
   const approveCurrentArch = () => {
@@ -741,15 +774,7 @@ ${selectedArch.mermaid || ""}
 
   return (
     <div>
-      <AppBar crumb="Pair with Gemi" onHome={onExit} right={
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button className="btn btn-secondary" onClick={() => setProjectsOpen(true)} title="Browse saved projects">
-            <Icon name="diagram" size={14} color="#1A73E8" />
-            Projects {savedProjects.length > 0 && <span className="count">{savedProjects.length}</span>}
-          </button>
-          <ConnChip state={live.state} />
-        </div>
-      } />
+      <AppBar crumb="Pair with Gemi" onHome={onExit} right={<ConnChip state={live.state} />} />
       <div className="scenario">
         {/* LEFT — conversation */}
         <div className="panel">
@@ -771,21 +796,35 @@ ${selectedArch.mermaid || ""}
             </div>
           </div>
 
-          <div className="transcript-toggle-wrap">
+          <div className="left-tabs">
             <button
-              className="transcript-toggle"
-              onClick={() => setShowTranscript(v => !v)}
-              aria-expanded={showTranscript}
+              className={"tab" + (leftTab === "history" ? " active" : "")}
+              onClick={() => setLeftTab("history")}
             >
-              <Icon name={showTranscript ? "close" : "code"} size={12} />
-              <span style={{ flex: 1, textAlign: "left" }}>
-                {showTranscript ? "Hide Hebrew transcript" : `Show Hebrew transcript${turns.length ? ` (${turns.length})` : ""}`}
-              </span>
-              <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>
-                {showTranscript ? "—" : "+"}
-              </span>
+              <Icon name="diagram" size={12} /> History
+              {savedProjects.length > 0 && <span className="count">{savedProjects.length}</span>}
             </button>
-            {showTranscript && <Transcript turns={turns} />}
+            <button
+              className={"tab" + (leftTab === "transcript" ? " active" : "")}
+              onClick={() => setLeftTab("transcript")}
+            >
+              <Icon name="code" size={12} /> Transcript
+              {turns.length > 0 && <span className="count">{turns.length}</span>}
+            </button>
+          </div>
+
+          <div className="left-tab-body">
+            {leftTab === "history" ? (
+              <HistoryList
+                projects={savedProjects}
+                currentId={currentProjectId}
+                onLoad={loadProject}
+                onDelete={deleteSavedProject}
+                onNew={startNewProject}
+              />
+            ) : (
+              <Transcript turns={turns} />
+            )}
           </div>
 
           <div className="panel-foot">
@@ -1113,42 +1152,6 @@ ${selectedArch.mermaid || ""}
         </div>
       </div>
 
-      {/* Projects history modal */}
-      {projectsOpen && (
-        <div className="modal-shade" onClick={() => setProjectsOpen(false)}>
-          <div className="modal projects-modal" onClick={e => e.stopPropagation()}>
-            <h2>Saved projects</h2>
-            <div className="desc">
-              {savedProjects.length === 0
-                ? "Projects you build with Gemi will appear here automatically once a preview goes live."
-                : `${savedProjects.length} saved project${savedProjects.length === 1 ? "" : "s"}. Click any one to load it back into the workspace.`}
-            </div>
-            <div className="projects-list">
-              {savedProjects.map(p => (
-                <div key={p.id} className={"project-row" + (p.id === currentProjectId ? " current" : "")}>
-                  <div className="thumb"><Icon name="globe" size={18} color="#1A73E8" /></div>
-                  <div className="meta-col">
-                    <div className="name">{p.name}</div>
-                    <div className="meta">
-                      {(p.files || []).length} file{(p.files || []).length === 1 ? "" : "s"} ·
-                      {" "}{new Date(p.savedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                      {p.id === currentProjectId && <span style={{ marginLeft: 8, color: "var(--gc-green)", fontWeight: 600 }}>· current</span>}
-                    </div>
-                  </div>
-                  <button className="btn btn-primary" onClick={() => loadProject(p.id)}>Load</button>
-                  <button className="btn btn-ghost btn-icon" title="Delete" onClick={() => deleteSavedProject(p.id)}>
-                    <Icon name="close" size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="actions">
-              <button className="btn btn-ghost" onClick={() => setProjectsOpen(false)}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* GitHub modal */}
       {ghOpen && (
         <div className="modal-shade" onClick={() => ghStep !== "pushing" && setGhOpen(false)}>
@@ -1203,6 +1206,14 @@ ${selectedArch.mermaid || ""}
       )}
     </div>
   );
+}
+
+function agentLabel(agent) {
+  if (agent === "logo") return "Image Generator";
+  if (agent === "qa") return "QA";
+  if (agent === "designer") return "Designer";
+  if (agent === "developer") return "Developer";
+  return agent;
 }
 
 function guessLang(filename) {
@@ -1272,8 +1283,8 @@ function UiBuildSplash({ status, agentActivity, files, recentlyWritten }) {
     title = "Designer agent thinking…";
     sub = "Asking the Designer agent for a palette and typography.";
   } else if (status === "generating-logo" || runningLogo) {
-    title = "Generating a logo…";
-    sub = `Running ${runningLogo?.request?.model || "nano-banana"} for the app's logo. This usually takes 4–8 seconds.`;
+    title = "Image Generator working…";
+    sub = `Running ${runningLogo?.request?.model || "nano-banana"} to generate "${runningLogo?.request?.token_id || "asset"}". Usually 4–8 seconds.`;
   } else if (qaRunning) {
     title = "QA agent reviewing…";
     sub = "Auditing the prototype for missing elements and accessibility.";
@@ -1305,7 +1316,7 @@ function UiBuildSplash({ status, agentActivity, files, recentlyWritten }) {
 
       {lastLogo && lastLogo.status === "done" && (
         <div className="logo-chip">
-          <Icon name="sparkle" size={12} color="#9B72CB" /> Logo ready · {lastLogo.summary}
+          <Icon name="sparkle" size={12} color="#9B72CB" /> Image ready · {lastLogo.summary}
         </div>
       )}
 
@@ -1360,7 +1371,7 @@ function AgentCard({ card }) {
   return (
     <div className={"agent-card"} data-agent={card.agent} data-status={card.status}>
       <div className="hdr">
-        <span className="badge">{card.agent}</span>
+        <span className="badge">{agentLabel(card.agent)}</span>
         <span className="dot" />
         <span className="time">{sec}s</span>
       </div>
@@ -1372,6 +1383,60 @@ function AgentCard({ card }) {
         <a className="link" href={consoleHref} target="_blank" rel="noreferrer">
           View Agent Engine session ↗
         </a>
+      )}
+    </div>
+  );
+}
+
+function HistoryList({ projects, currentId, onLoad, onDelete, onNew }) {
+  return (
+    <div className="history-pane">
+      <div className="history-actions">
+        <button className="btn btn-secondary btn-sm" onClick={onNew} title="Start a fresh project">
+          <Icon name="bolt" size={12} color="#1A73E8" /> New project
+        </button>
+      </div>
+      {projects.length === 0 ? (
+        <div className="history-empty">
+          <div className="ic"><Icon name="diagram" size={24} color="#1A73E8" /></div>
+          <div className="t">No saved projects yet</div>
+          <div className="s">Projects you build with Gemi are saved here automatically. They survive page reloads.</div>
+        </div>
+      ) : (
+        <div className="history-list">
+          {projects.map(p => {
+            const isCurrent = p.id === currentId;
+            const fileCount = (p.files || []).length;
+            return (
+              <div
+                key={p.id}
+                className={"history-row" + (isCurrent ? " current" : "")}
+                onClick={() => !isCurrent && onLoad(p.id)}
+                title={isCurrent ? "This is the current project" : "Click to load this project"}
+              >
+                <div className="thumb">
+                  <Icon name={fileCount > 0 ? "globe" : "diagram"} size={16} color="#1A73E8" />
+                </div>
+                <div className="meta-col">
+                  <div className="name">{p.name}</div>
+                  <div className="meta">
+                    {fileCount} file{fileCount === 1 ? "" : "s"} ·
+                    {" "}{new Date(p.savedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    {isCurrent && <span className="current-badge">· current</span>}
+                  </div>
+                </div>
+                <button
+                  className="del"
+                  onClick={(e) => onDelete(p.id, e)}
+                  title="Delete this project"
+                  aria-label="Delete project"
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
