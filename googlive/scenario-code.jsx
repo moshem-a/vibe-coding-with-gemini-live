@@ -3,13 +3,20 @@ const CODY_SYSTEM_PROMPT = `You are Gemi, a Google Cloud-native pair programmer.
 
 The workflow has FOUR phases. Move through them deliberately.
 
+═══ HARD RULES — NEVER VIOLATE ═══
+1. PACING: ONE phase-transition tool per turn, max. The phase-transition tools are: propose_architecture, approve_architecture, start_build, write_file, show_preview. NEVER chain two of them in the same response. Speak between every phase, and WAIT for the user's voice reply before the next phase tool.
+2. NEVER call propose_architecture in your very first turn. Phase 1 starts with your greeting + one discovery question and waits for the user to answer. Tool calls in turn 1 = forbidden.
+3. NEVER call approve_architecture in the SAME turn as propose_architecture. After propose, you speak ("Let me sketch a first version… here's what I'm thinking…") and STOP. Only call approve_architecture after the user has explicitly verbally approved (or the host sent "USER APPROVED VERSION N").
+4. NEVER call show_preview unless write_file('index.html', …) returned ok in a previous turn. The host WILL reject show_preview with an error if no index.html exists yet — and you will look broken on stage. Write the file first, in its own turn, with the FULL HTML content. Then in a later turn, show_preview.
+5. NEVER announce "the app is ready" / "האפליקציה מוכנה" before show_preview has returned ok. If the file isn't written yet, don't claim it is.
+
 PHASE 1 — DISCOVERY (you start here)
-Ask 3–4 short, focused questions to understand what they want to build, the users, scale, and constraints. ONE question per turn. Don\'t propose anything yet.
+Ask 3–4 short, focused questions to understand what they want to build, the users, scale, and constraints. ONE question per turn. Don\'t propose anything yet. NO tool calls in this phase until you have at least one real user answer about what they want to build.
 
 PHASE 2 — ARCHITECTURE
-When you have enough, say "Let me sketch a first version" and call propose_architecture(version=1, ...) with a Mermaid flowchart of 5–9 Google Cloud services. Walk through it in 15 seconds. Then ask: "Want to see an alternative, or shall we go with this?"
-- If they want a variation, call propose_architecture(version=2, ...) etc. Each version is preserved.
-- When the user clearly approves (or you receive a system message saying "USER APPROVED VERSION N"), call approve_architecture(version=N) and move on.
+When you have enough discovery answers, say "Let me sketch a first version" and call propose_architecture(version=1, ...) with a Mermaid flowchart of 5–9 Google Cloud services. Then STOP — walk the user through it verbally and ask: "Want to see an alternative, or shall we go with this?" Wait for them to reply.
+- If they want a variation, call propose_architecture(version=2, ...) in a LATER turn. Each version is preserved.
+- approve_architecture only fires AFTER the user verbally approves the version (or the host sends "USER APPROVED VERSION N"). Never in the same turn as propose. Never as a guess.
 
 MERMAID RULES for propose_architecture\'s 'mermaid' field:
 - Start with 'flowchart TD' (top-down) or 'flowchart LR' (left-right).
@@ -75,7 +82,7 @@ Step 3e — Consult the QA agent:
   Call consult_qa({ html: "<your full index.html>" }). If it returns ok=false with high-severity issues, fix them with update_file before previewing.
 
 Step 3f — Show the preview & ANNOUNCE:
-  Call show_preview(). IMMEDIATELY after the tool call returns, say ONE short Hebrew sentence announcing the app is ready and inviting the next change. Use exactly: "האפליקציה שלך מוכנה! מה תרצה לשנות או להוסיף?"
+  Call show_preview() — ONLY after write_file('index.html', ...) has returned ok in a previous turn. If you try to show_preview without index.html written, the host rejects the call and you will be silent on stage. After show_preview RETURNS ok, then say exactly: "האפליקציה שלך מוכנה! מה תרצה לשנות או להוסיף?" — and only then. Never announce readiness before the tool returns ok.
 
 PHASE 4 — LIVE EDITS (voice-driven)
 The user will speak changes. Apply them immediately — never ask permission.
@@ -460,6 +467,12 @@ function ScenarioCode({ apiKey, onExit }) {
   // Stable id for the *current* in-progress project so saves don't double-write
   // under different randomly-generated ids while React batches state updates.
   const projectIdRef = useRef(null);
+  // Mirrors of state used inside async onToolCall — React state is stale across
+  // the await boundary, so we read the ref instead and validate phase ordering.
+  const architecturesRef = useRef([]);
+  const filesRef = useRef([]);
+  useEffect(() => { architecturesRef.current = architectures; }, [architectures]);
+  useEffect(() => { filesRef.current = files; }, [files]);
   const [, force] = useState(0);
 
   // Helpers for agent activity cards
@@ -498,12 +511,21 @@ function ScenarioCode({ apiKey, onExit }) {
     },
     onToolCall: async (tc) => {
       const responses = [];
+      // Per-batch shadow state — guards reject out-of-order calls (the bug
+      // where the model rushes propose→approve→start_build→show_preview
+      // in a single turn without doing any real work). Seeded from refs
+      // (state is stale across awaits) and updated as we process the batch.
+      const batchArchs = [...architecturesRef.current];
+      const batchFiles = [...filesRef.current];
       for (const fc of (tc.functionCalls || [])) {
         if (fc.name === "propose_architecture") {
           const a = { ...fc.args, approved: false };
+          const idx = batchArchs.findIndex(x => x.version === a.version);
+          if (idx >= 0) batchArchs[idx] = { ...a, approved: batchArchs[idx].approved };
+          else batchArchs.push(a);
           setArchitectures((prev) => {
-            const idx = prev.findIndex(x => x.version === a.version);
-            return idx >= 0 ? prev.map((x, i) => i === idx ? { ...a, approved: x.approved } : x) : [...prev, a];
+            const i = prev.findIndex(x => x.version === a.version);
+            return i >= 0 ? prev.map((x, j) => j === i ? { ...a, approved: x.approved } : x) : [...prev, a];
           });
           setSelectedArchVer(a.version);
           setPhase("architecture");
@@ -511,11 +533,21 @@ function ScenarioCode({ apiKey, onExit }) {
           responses.push({ id: fc.id, name: fc.name, response: { ok: true } });
         }
         else if (fc.name === "approve_architecture") {
-          setArchitectures((prev) => prev.map(x => ({ ...x, approved: x.version === fc.args.version })));
-          setSelectedArchVer(fc.args.version);
+          const v = fc.args.version;
+          if (!batchArchs.some(x => x.version === v)) {
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: `Cannot approve version ${v}: no propose_architecture for that version exists yet. Call propose_architecture first, walk the user through it, and wait for them to verbally approve before calling approve_architecture.` } });
+            continue;
+          }
+          for (let i = 0; i < batchArchs.length; i++) batchArchs[i] = { ...batchArchs[i], approved: batchArchs[i].version === v };
+          setArchitectures((prev) => prev.map(x => ({ ...x, approved: x.version === v })));
+          setSelectedArchVer(v);
           responses.push({ id: fc.id, name: fc.name, response: { ok: true } });
         }
         else if (fc.name === "start_build") {
+          if (!batchArchs.some(x => x.approved)) {
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: "Cannot start_build: no architecture has been approved yet. Call propose_architecture, then approve_architecture (only after the user verbally approves), THEN start_build — in separate turns." } });
+            continue;
+          }
           setPhase("building");
           setActiveTab("preview"); // jump straight to the preview pane so the "writing UI" splash is visible
           setUiGenerationStatus("writing-ui");
@@ -523,7 +555,9 @@ function ScenarioCode({ apiKey, onExit }) {
         }
         else if (fc.name === "write_file") {
           const f = { filename: fc.args.filename, language: fc.args.language || guessLang(fc.args.filename), content: fc.args.content, summary: fc.args.summary || "" };
-          const isFirstHtml = /index\.html$/i.test(f.filename) && !files.some(x => /index\.html$/i.test(x.filename));
+          const isFirstHtml = /index\.html$/i.test(f.filename) && !batchFiles.some(x => /index\.html$/i.test(x.filename));
+          const bIdx = batchFiles.findIndex(x => x.filename === f.filename);
+          if (bIdx >= 0) batchFiles[bIdx] = f; else batchFiles.push(f);
           setFiles((prev) => {
             const idx = prev.findIndex(x => x.filename === f.filename);
             return idx >= 0 ? prev.map((x, i) => i === idx ? f : x) : [...prev, f];
@@ -565,6 +599,10 @@ function ScenarioCode({ apiKey, onExit }) {
           responses.push({ id: fc.id, name: fc.name, response: { ok: true } });
         }
         else if (fc.name === "show_preview") {
+          if (!batchFiles.some(x => /index\.html$/i.test(x.filename))) {
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: "Cannot show_preview: no index.html has been written yet. Call write_file({filename:'index.html', content: '<full self-contained HTML>'}) FIRST, then call show_preview. Do not announce the app is ready until you have actually written the file." } });
+            continue;
+          }
           setPhase("preview");
           setActiveTab("preview");
           setUiGenerationStatus("ready");
