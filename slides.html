@@ -429,18 +429,18 @@
       <div class="mermaid-wrap">
         <pre class="mermaid">
 flowchart LR
-  User((🎙️ User<br/>speaks))
+  User((User<br/>speaks))
 
-  subgraph Browser["Browser — Cloud Run · Nginx · static React"]
+  subgraph Browser["Browser — Cloud Run · static React"]
     direction TB
-    Mic["MicCapture<br/><span style='font-size:11px;opacity:.75'>16 kHz PCM · AudioWorklet</span>"]
-    React["React App<br/><span style='font-size:11px;opacity:.75'>4 scenarios · tool-call handlers</span>"]
-    Player["AudioPlayer<br/><span style='font-size:11px;opacity:.75'>24 kHz playback</span>"]
-    Iframe["Preview Iframe<br/><span style='font-size:11px;opacity:.75'>multi-view SPA · postMessage</span>"]
-    IDB[("IndexedDB<br/><span style='font-size:11px;opacity:.75'>project history</span>")]
+    Mic["MicCapture<br/>16 kHz PCM"]
+    React["React App<br/>4 scenarios · tool handlers"]
+    Player["AudioPlayer<br/>24 kHz playback"]
+    Iframe["Preview Iframe<br/>multi-view SPA"]
+    IDB[("IndexedDB<br/>project history")]
   end
 
-  Live{{"Gemini Live · WebSocket<br/>gemini-3.1-flash-live-preview<br/><span style='font-size:11px;opacity:.75'>voice: Puck · he-IL</span>"}}
+  Live{{"Gemini Live · WebSocket<br/>gemini-3.1-flash-live-preview<br/>voice: Puck · he-IL"}}
 
   subgraph Agents["Sub-agents · gemini-3.1-pro-preview"]
     direction TB
@@ -459,15 +459,15 @@ flowchart LR
   Mic -- PCM frames --> Live
   Live -- audio --> Player
   Player -- voice out --> User
-  Live <-. tool-calls / responses .-> React
+  Live <-. tool-calls .-> React
   React -- consult_* --> Designer
   React -- consult_* --> QA
   React -- consult_* --> Dev
   React -- generate_logo --> Nano
   React -- generate_logo --> Img4
-  React -- write_file / show_preview --> Iframe
-  Iframe -. navigate / back .-> React
-  React <-. auto-save / load .-> IDB
+  React -- write_file --> Iframe
+  Iframe -. navigate .-> React
+  React <-. save / load .-> IDB
 
   classDef user fill:#1A73E8,stroke:#1A6CDB,color:#fff
   classDef live fill:#9B72CB,stroke:#7E55B0,color:#fff
@@ -580,31 +580,31 @@ flowchart LR
       <div class="mermaid-wrap">
         <pre class="mermaid">
 flowchart LR
-  User((🎙️ User))
+  User((User))
   Live{{"Gemi · Live API<br/>gemini-3.1-flash-live-preview"}}
-  Iframe["Preview iframe<br/><span style='font-size:11px;opacity:.75'>multi-view SPA</span>"]
+  Iframe["Preview iframe<br/>multi-view SPA"]
 
   User <-. voice .-> Live
 
-  Live -- "consult_designer<br/><span style='font-size:11px;opacity:.7'>{question, current_html}</span>" --> Designer
-  Designer -- "<span style='font-size:11px;opacity:.7'>{palette, typography,<br/>recommendations, css_snippet}</span>" --> Live
+  Live -- "consult_designer<br/>{question, current_html}" --> Designer
+  Designer -- "{palette, typography,<br/>recommendations, css_snippet}" --> Live
 
-  Live -- "consult_qa<br/><span style='font-size:11px;opacity:.7'>{html}</span>" --> QA
-  QA -- "<span style='font-size:11px;opacity:.7'>{issues[], ok}</span>" --> Live
+  Live -- "consult_qa<br/>{html}" --> QA
+  QA -- "{issues[], ok}" --> Live
 
-  Live -- "consult_developer<br/><span style='font-size:11px;opacity:.7'>{task, current_code}</span>" --> Dev
-  Dev -- "<span style='font-size:11px;opacity:.7'>{approach, code_snippet,<br/>considerations, risks}</span>" --> Live
+  Live -- "consult_developer<br/>{task, current_code}" --> Dev
+  Dev -- "{approach, snippet,<br/>considerations, risks}" --> Live
 
-  Live -- "generate_logo<br/><span style='font-size:11px;opacity:.7'>{prompt, style, token_id}</span>" --> Imgen
-  Imgen -- "<span style='font-size:11px;opacity:.7'>data URL<br/>(swapped at render time)</span>" --> Live
+  Live -- "generate_logo<br/>{prompt, style, token_id}" --> Imgen
+  Imgen -- "data URL<br/>(swapped at render)" --> Live
 
-  Live -- "write_file · update_file · show_preview" --> Iframe
+  Live -- "write_file · show_preview" --> Iframe
   Live -- "navigate_preview" --> Iframe
 
-  Designer["🎨 Designer agent<br/><span style='font-size:11px;opacity:.7'>gemini-3.1-pro-preview</span>"]
-  QA["🛡️ QA agent<br/><span style='font-size:11px;opacity:.7'>gemini-3.1-pro-preview</span>"]
-  Dev["⚙️ Developer agent<br/><span style='font-size:11px;opacity:.7'>gemini-3.1-pro-preview</span>"]
-  Imgen["🖼️ Image Generator<br/><span style='font-size:11px;opacity:.7'>Nano Banana · Imagen 4</span>"]
+  Designer["Designer agent<br/>gemini-3.1-pro-preview"]
+  QA["QA agent<br/>gemini-3.1-pro-preview"]
+  Dev["Developer agent<br/>gemini-3.1-pro-preview"]
+  Imgen["Image Generator<br/>Nano Banana · Imagen 4"]
 
   classDef user fill:#1A73E8,stroke:#1A6CDB,color:#fff
   classDef live fill:#9B72CB,stroke:#7E55B0,color:#fff
@@ -811,7 +811,8 @@ previewIframe.contentWindow.postMessage(
 <script>
 if (window.mermaid) {
   mermaid.initialize({
-    startOnLoad: true,
+    startOnLoad: false,            // we trigger render manually so hidden slides render too
+    securityLevel: "loose",        // allow plain <br/> and basic HTML in node labels
     theme: "base",
     fontFamily: "Google Sans, system-ui, sans-serif",
     themeVariables: {
@@ -825,8 +826,12 @@ if (window.mermaid) {
       clusterBorder: "rgba(255,255,255,.18)",
       edgeLabelBackground: "#0e1014"
     },
-    flowchart: { curve: "basis", htmlLabels: true, padding: 14 }
+    flowchart: { curve: "basis", htmlLabels: true, padding: 14, useMaxWidth: true }
   });
+  // Render after fonts load so the SVG measures text correctly.
+  const renderAll = () => mermaid.run({ querySelector: ".mermaid" }).catch(err => console.error("[mermaid]", err));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(renderAll);
+  else window.addEventListener("load", renderAll);
 }
 (function () {
   const slides = Array.from(document.querySelectorAll('.slide'));
