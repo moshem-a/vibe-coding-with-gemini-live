@@ -26,21 +26,111 @@ const Icon = ({ name, size = 20, color = "currentColor", style }) => {
     speaker:    <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill={color} stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14" {...stroke} /></>,
     diagram:    <><rect x="3" y="3" width="6" height="6" rx="1" {...stroke} /><rect x="15" y="3" width="6" height="6" rx="1" {...stroke} /><rect x="9" y="15" width="6" height="6" rx="1" {...stroke} /><path d="M6 9v3h12V9M12 12v3" {...stroke} /></>,
     bolt:       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" stroke={color} strokeWidth={1.5} fill={color} fillOpacity=".15" strokeLinejoin="round"/>,
+    sun:        <><circle cx="12" cy="12" r="4" {...stroke} /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" {...stroke} /></>,
+    moon:       <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" {...stroke} />,
+    pencil:     <><path d="M12 20h9" {...stroke} /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" {...stroke} /></>,
   };
   return <svg viewBox="0 0 24 24" style={s}>{paths[name]}</svg>;
 };
+
+// ─── Theme ────────────────────────────────────────────────────────
+// "light" | "dark" — the saved preference; "system" means no override.
+const THEME_LS_KEY = "geminilive_theme";
+const THEME_EVT    = "geminilive:themechange";
+
+function readPref() {
+  const saved = localStorage.getItem(THEME_LS_KEY);
+  return (saved === "dark" || saved === "light" || saved === "system") ? saved : "system";
+}
+function resolveEffective(pref) {
+  if (pref === "dark" || pref === "light") return pref;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+function applyTheme(pref) {
+  const effective = resolveEffective(pref);
+  document.documentElement.dataset.theme = effective;
+  if (pref === "system") localStorage.removeItem(THEME_LS_KEY);
+  else                   localStorage.setItem(THEME_LS_KEY, pref);
+  window.dispatchEvent(new CustomEvent(THEME_EVT, { detail: { pref, effective } }));
+}
+
+function useTheme() {
+  const [pref, setPref] = useState(readPref);
+  useEffect(() => {
+    const onChange = (e) => setPref(e.detail.pref);
+    window.addEventListener(THEME_EVT, onChange);
+    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
+    const onSys = () => { if (readPref() === "system") applyTheme("system"); };
+    mq?.addEventListener?.("change", onSys);
+    return () => {
+      window.removeEventListener(THEME_EVT, onChange);
+      mq?.removeEventListener?.("change", onSys);
+    };
+  }, []);
+  return { pref, effective: resolveEffective(pref), setTheme: applyTheme };
+}
+
+function ThemeToggle() {
+  const { effective, setTheme } = useTheme();
+  const isDark = effective === "dark";
+  return (
+    <button
+      className="btn btn-ghost"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      title={isDark ? "Switch to light theme" : "Switch to dark theme"}
+      aria-label="Toggle theme"
+    >
+      <Icon name={isDark ? "sun" : "moon"} size={18} />
+      {isDark ? "Light" : "Dark"}
+    </button>
+  );
+}
+
+function ThemePicker() {
+  const { pref, setTheme } = useTheme();
+  const opts = [
+    { id: "light",  icon: "sun",      label: "Light" },
+    { id: "dark",   icon: "moon",     label: "Dark" },
+    { id: "system", icon: "settings", label: "System" }
+  ];
+  return (
+    <div className="theme-picker" role="radiogroup" aria-label="Theme">
+      {opts.map((o) => (
+        <button
+          key={o.id}
+          role="radio"
+          aria-checked={pref === o.id}
+          className={"theme-opt" + (pref === o.id ? " active" : "")}
+          onClick={() => setTheme(o.id)}
+        >
+          <Icon name={o.icon} size={16} />
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // ─── App bar ──────────────────────────────────────────────────────
 function AppBar({ crumb, right, onHome }) {
   return (
     <div className="appbar">
-      <div className="logo" onClick={onHome} style={{ cursor: onHome ? "pointer" : "default" }}>
+      <div
+        className="logo"
+        onClick={onHome}
+        role={onHome ? "button" : undefined}
+        tabIndex={onHome ? 0 : undefined}
+        title={onHome ? "Back to home" : undefined}
+        onKeyDown={onHome ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onHome(); } } : undefined}
+        style={{ cursor: onHome ? "pointer" : "default" }}
+      >
         <div className="mark">G</div>
         <div>Gemini Live <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}>· Demo Suite</span></div>
       </div>
       {crumb && <div className="crumb">/ <b>{crumb}</b></div>}
       <div className="spacer" />
       {right}
+      <ThemeToggle />
       <div className="pill"><span className="dot" /> Gemini 3.1 Flash · Live</div>
     </div>
   );
@@ -199,5 +289,5 @@ function useLiveSession({ apiKey, model, systemInstruction, voice, tools, respon
 
 // ─── Export ──────────────────────────────────────────────────────
 Object.assign(window, {
-  Icon, AppBar, Waveform, Transcript, ConnChip, SetupCard, useLiveSession
+  Icon, AppBar, ThemeToggle, ThemePicker, useTheme, Waveform, Transcript, ConnChip, SetupCard, useLiveSession
 });

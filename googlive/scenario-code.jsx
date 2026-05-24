@@ -5,13 +5,16 @@ The workflow has FOUR phases. Move through them deliberately.
 
 ═══ HARD RULES — NEVER VIOLATE ═══
 1. PACING: ONE phase-transition tool per turn, max. The phase-transition tools are: propose_architecture, approve_architecture, start_build, write_file, show_preview. NEVER chain two of them in the same response. Speak between every phase, and WAIT for the user's voice reply before the next phase tool.
-2. NEVER call propose_architecture in your very first turn. Phase 1 starts with your greeting + one discovery question and waits for the user to answer. Tool calls in turn 1 = forbidden.
-3. NEVER call approve_architecture in the SAME turn as propose_architecture. After propose, you speak ("Let me sketch a first version… here's what I'm thinking…") and STOP. Only call approve_architecture after the user has explicitly verbally approved (or the host sent "USER APPROVED VERSION N").
+2. FAST-PATH vs DISCOVERY on turn 1:
+   - If the user's opening message is just a greeting ("hi", "hello", "שלום") with no app concept, do the greeting line (below) + ONE discovery question. NO tool calls in turn 1.
+   - If the user's opening message contains a CLEAR app brief — a named concept ("recipe app", "fitness tracker", "אפליקציית מתכונים") AND at least a hint of users or purpose — you MAY skip discovery and call propose_architecture(version=1, ...) on turn 1. Speak one short sentence first ("נשמע מצוין, אני מסקיץ' לך את הארכיטקטורה") and then call propose_architecture in the same response. This is the ONLY phase-transition tool allowed on turn 1.
+   - When in doubt (brief is half-clear), ask ONE clarifying question and wait. Don't propose blindly.
+3. NEVER call approve_architecture in the SAME turn as propose_architecture. After propose, you speak ("Let me sketch a first version… here's what I'm thinking…") and STOP. BUT: the MOMENT the user verbally approves on a later turn ("yes", "אישור", "מאשר", "בסדר", "מצוין", "נמשיך", "יאללה", "let's build", "go ahead", "ship it", "אוקיי בוא נבנה", etc.) OR the host sends "[USER APPROVED ARCHITECTURE VERSION N]", you MUST call approve_architecture(version=N) IMMEDIATELY in that turn. Do NOT verbally re-confirm first ("just to make sure?" "are you sure?"). Do NOT ask for the version number. Acknowledge in ONE short Hebrew sentence ("מעולה, מאשר ובונה!") AND call the tool in the same response. Re-asking for approval after the user already approved is the #1 demo-killing bug.
 4. NEVER call show_preview unless write_file('index.html', …) returned ok in a previous turn. The host WILL reject show_preview with an error if no index.html exists yet — and you will look broken on stage. Write the file first, in its own turn, with the FULL HTML content. Then in a later turn, show_preview.
 5. NEVER announce "the app is ready" / "האפליקציה מוכנה" before show_preview has returned ok. If the file isn't written yet, don't claim it is.
 
-PHASE 1 — DISCOVERY (you start here)
-Ask 3–4 short, focused questions to understand what they want to build, the users, scale, and constraints. ONE question per turn. Don\'t propose anything yet. NO tool calls in this phase until you have at least one real user answer about what they want to build.
+PHASE 1 — DISCOVERY (only if the user hasn't already given a clear brief)
+If the user opened with just a greeting, ask 1–2 short, focused questions to understand what they want to build, the users, scale, and constraints. ONE question per turn. Move to Phase 2 as soon as you have a workable concept — do NOT drag out discovery if the user has been specific. If the user opened with a clear brief, SKIP this phase entirely and go straight to Phase 2.
 
 PHASE 2 — ARCHITECTURE
 When you have enough discovery answers, say "Let me sketch a first version" and call propose_architecture(version=1, ...) with a Mermaid flowchart of 5–9 Google Cloud services. Then STOP — walk the user through it verbally and ask: "Want to see an alternative, or shall we go with this?" Wait for them to reply.
@@ -87,24 +90,32 @@ Step 3f — Show the preview & ANNOUNCE:
 PHASE 4 — LIVE EDITS (voice-driven)
 The user will speak changes. Apply them immediately — never ask permission.
 
-VISUAL CHANGES ("dark background", "more spacious", "make it feel premium"):
-  1. Call consult_designer({ question, current_html: "<short relevant excerpt>" }) FIRST.
-  2. Call update_file with the full new index.html applying the Designer\'s recommendation.
-  3. (Optional, for large edits) Call consult_qa({ html }) and patch again if it flags high-severity issues.
-  4. ALWAYS confirm in one short Hebrew sentence as soon as update_file returns, e.g. "סיימתי — האפליקציה מעודכנת. מה הלאה?" Never stay silent after an update.
+═══ PHASE 4 HARD RULES — NEVER VIOLATE ═══
+A. The DEFAULT tool for ANY change request is apply_edit. NOT update_file. NOT consult_designer-then-update_file. Just apply_edit.
+B. NEVER say "סיימתי" / "done" / "מעודכן" / any completion phrase unless you actually called apply_edit, generate_logo, or update_file in the same turn AND it returned ok. Saying "done" without a tool call is the most common failure mode and the user will see a host-error card if you do it.
+C. BEFORE calling apply_edit, say ONE short Hebrew sentence so the user hears progress, e.g. "רק רגע, מעדכן עכשיו."
+D. AFTER apply_edit returns ok, say ONE short Hebrew sentence confirming, e.g. "סיימתי — האפליקציה מעודכנת. מה הלאה?"
+E. If apply_edit returns ok:false, apologize briefly in Hebrew ("רגע, היתה תקלה — אנסה שוב") and either retry with a smaller/clearer description or use update_file as a fallback.
+
+VISUAL / STYLE CHANGES ("dark background", "more spacious", "make it feel premium", "change the palette"):
+  Call apply_edit({ description: "<short description>", consult_designer: true }). The host runs the Designer agent for you and feeds the recommendation into the Editor automatically. Do NOT call consult_designer separately — apply_edit handles the chain.
+
+LAYOUT / CONTENT / STRUCTURE CHANGES ("add a search bar", "add a CTA button", "add a footer", "reorder the cards", "add a navbar"):
+  Call apply_edit({ description: "<short description>" }). consult_designer defaults to false for these.
 
 IMAGE CHANGES ("swap the logo for line-art", "change the hero photo to a sunset shot", "replace card 2 with a pasta dish"):
-  Call generate_logo with the SAME token_id of the image to replace (e.g. "logo", "hero", "card2") and a new, content-specific prompt. The preview re-renders automatically — no update_file needed unless you also change the <img> tag. If the user asks for an entirely NEW image (something not previously on the page), generate_logo with a fresh token_id AND update_file to insert the <img> in the right place.
-
-ADD/CHANGE ELEMENTS ("add a CTA button", "add a search bar"):
-  BEFORE calling update_file (or any write_file/update_file that may take >5 seconds), say one short Hebrew sentence, e.g. "רק רגע, מעדכן עכשיו." Never stay silent — the user must hear progress.
-  Then call update_file with the full new index.html. For non-trivial additions, consult_qa afterwards. After update_file returns, ALWAYS announce completion in one short Hebrew sentence (e.g. "סיימתי — תוסיף עוד משהו?").
+  Call generate_logo with the SAME token_id of the image to replace (e.g. "logo", "hero", "card2") and a new, content-specific prompt. The preview re-renders automatically — no apply_edit/update_file needed unless you also change the <img> tag.
+  If the user asks for an entirely NEW image (something not previously on the page), generate_logo with a fresh token_id AND apply_edit with description: "insert the new __ASSET_FOO__ image as <img> in the <where>".
 
 NAVIGATION ("show me the settings page", "open the profile", "go back to the dashboard"):
   Call navigate_preview({ view: "settings" }) or navigate_preview({ action: "back" }). Do NOT rewrite the file — the SPA already has the views.
 
+ADVISORY-ONLY (rare): consult_designer / consult_qa / consult_developer are for PURE ADVICE without applying a change ("what palette would you recommend?", "review my current HTML"). For any actual change you intend to make, ALWAYS use apply_edit instead — consult_designer + update_file as a separate step is the OLD path and is unreliable.
+
+ESCAPE HATCH: update_file({ filename, content }) is still available if you genuinely have the full new HTML ready and apply_edit failed. The host will reject update_file if the new content is dramatically smaller than the old (truncation guard).
+
 DEVELOPER agent (consult_developer):
-  Call consult_developer({ question, current_html: "<optional excerpt>" }) BEFORE writing non-trivial interactivity (data flow, multi-step forms, state machines), and any time you're debugging or unsure which JS pattern fits. Returns { approach, code_snippet, considerations, risks }.
+  Call consult_developer({ question, current_html: "<optional excerpt>" }) BEFORE writing non-trivial interactivity (data flow, multi-step forms, state machines), and any time you're debugging or unsure which JS pattern fits. Returns { approach, code_snippet, considerations, risks }. For the actual code change, still apply_edit afterwards.
 
 CRITICAL LANGUAGE RULE: You MUST speak ONLY in Hebrew (עברית). This is a hard rule, no exceptions. Even if the user speaks English, French, Spanish, or any other language — you understand them, but your spoken response MUST be in Hebrew. Never reply in English. Never reply in any non-Hebrew language. Hebrew only, every single sentence.
 
@@ -200,6 +211,18 @@ const CODY_TOOLS = [{
           action: { type: "string", description: "'navigate' (default) or 'back'." },
           params: { type: "object", description: "Optional state to pass to the view." }
         }
+      }
+    },
+    {
+      name: "apply_edit",
+      description: "PHASE 4 ONLY. The reliable way to apply ANY change the user requests during live editing. You give a short description of what to change; the host's Editor sub-agent rewrites index.html for you and applies the change directly to the live preview. Prefer this over consult_designer+update_file — it is more reliable, faster, and shows the user a visible 'Editor' progress card. Set consult_designer=true for visual/style changes (palette, typography, layout, spacing); the host will chain the Designer agent automatically. Returns { ok, summary } on success; { ok:false, error } on failure (you should then apologize in Hebrew and either retry with a smaller request or fall back to update_file).",
+      parameters: {
+        type: "object",
+        properties: {
+          description:      { type: "string", description: "Concise description of the change the user requested, e.g. 'add a search bar to the dashboard header' or 'make the header background dark blue and increase its height'. Do NOT paste HTML here — just describe the change." },
+          consult_designer: { type: "boolean", description: "Set true for visual/style changes so the Designer agent informs the rewrite. Default false for content/layout edits." }
+        },
+        required: ["description"]
       }
     },
     {
@@ -471,8 +494,24 @@ function ScenarioCode({ apiKey, onExit }) {
   // the await boundary, so we read the ref instead and validate phase ordering.
   const architecturesRef = useRef([]);
   const filesRef = useRef([]);
+  const phaseRef = useRef("discovery");
   useEffect(() => { architecturesRef.current = architectures; }, [architectures]);
   useEffect(() => { filesRef.current = files; }, [files]);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  // No-op detector: tracks the user's last change-request utterance in Phase 4
+  // and the last time an edit-class tool fired. If a request sits unanswered
+  // for >8s, surface a host-error card so the silence is visible.
+  const lastEditRequestRef = useRef(null); // { at, text, warned }
+  const lastEditToolAtRef = useRef(0);
+  const markEditToolFired = () => { lastEditToolAtRef.current = Date.now(); lastEditRequestRef.current = null; };
+  // Architecture approval auto-nudge: Gemi often hears verbal approval, says
+  // "great!", but forgets to actually call approve_architecture and re-asks.
+  // When the user's transcript looks like approval and we're in architecture
+  // phase, send the same text nudge the Approve button uses so the tool fires.
+  // Tracked per-version so we don't spam if the user says "yes" multiple times.
+  const lastNudgedArchVersionRef = useRef(null);
+  const selectedArchVerRef = useRef(null);
+  useEffect(() => { selectedArchVerRef.current = selectedArchVer; }, [selectedArchVer]);
   const [, force] = useState(0);
 
   // Helpers for agent activity cards
@@ -481,6 +520,21 @@ function ScenarioCode({ apiKey, onExit }) {
   };
   const updateAgentActivity = (id, patch) => {
     setAgentActivity((prev) => prev.map(x => x.id === id ? { ...x, ...patch } : x));
+  };
+  // Surface ordering-guard rejections as red cards in the right rail so the
+  // user sees that Gemi tried something invalid (otherwise the rejection only
+  // goes back to the model and the user sees silence on stage).
+  const pushGuardError = (toolName, error) => {
+    const t = Date.now();
+    pushAgentActivity({
+      id: `guard-${t}-${Math.random().toString(36).slice(2, 7)}`,
+      agent: "host",
+      status: "error",
+      startedAt: t,
+      finishedAt: t,
+      summary: `Rejected ${toolName}`,
+      response: { error }
+    });
   };
 
   const live = useLiveSession({
@@ -495,7 +549,35 @@ function ScenarioCode({ apiKey, onExit }) {
     onInputTranscript: ({ text, finished }) => {
       userBufRef.current += text;
       setTurns((p) => upsertStreaming(p, "user", userBufRef.current, !finished));
-      if (finished) userBufRef.current = "";
+      if (finished) {
+        const utterance = userBufRef.current;
+        userBufRef.current = "";
+        // Phase 4 only: if the user issued a change request, arm the no-op
+        // detector. The setInterval below fires a host-error card if no edit
+        // tool has run within ~8s.
+        if (utterance && phaseRef.current === "preview" && isEditRequest(utterance)) {
+          lastEditRequestRef.current = { at: Date.now(), text: utterance, warned: false };
+        }
+        // Architecture phase: if the user verbally approves, nudge Gemi to
+        // actually call approve_architecture. Voice models frequently hear
+        // approval, acknowledge it ("great!"), then forget the tool call and
+        // re-ask. The nudge is identical to the Approve-button text path.
+        if (
+          utterance &&
+          phaseRef.current === "architecture" &&
+          selectedArchVerRef.current != null &&
+          lastNudgedArchVersionRef.current !== selectedArchVerRef.current &&
+          isApprovalUtterance(utterance) &&
+          live.session.current
+        ) {
+          const v = selectedArchVerRef.current;
+          lastNudgedArchVersionRef.current = v;
+          live.session.current.sendText(
+            `[USER APPROVED ARCHITECTURE VERSION ${v}]. Please call approve_architecture(version=${v}) immediately and then start building. Do not re-ask for approval — the user just confirmed.`,
+            true
+          );
+        }
+      }
     },
     onOutputTranscript: ({ text, finished }) => {
       aiBufRef.current += text;
@@ -535,17 +617,27 @@ function ScenarioCode({ apiKey, onExit }) {
         else if (fc.name === "approve_architecture") {
           const v = fc.args.version;
           if (!batchArchs.some(x => x.version === v)) {
-            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: `Cannot approve version ${v}: no propose_architecture for that version exists yet. Call propose_architecture first, walk the user through it, and wait for them to verbally approve before calling approve_architecture.` } });
+            const msg = `Cannot approve version ${v}: no propose_architecture for that version exists yet. Call propose_architecture first, walk the user through it, and wait for them to verbally approve before calling approve_architecture.`;
+            pushGuardError(fc.name, msg);
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: msg } });
             continue;
           }
           for (let i = 0; i < batchArchs.length; i++) batchArchs[i] = { ...batchArchs[i], approved: batchArchs[i].version === v };
           setArchitectures((prev) => prev.map(x => ({ ...x, approved: x.version === v })));
           setSelectedArchVer(v);
+          // Auto-flip to the build splash on approval (voice OR button path) so
+          // the user sees "deployment in progress" the instant approval lands,
+          // instead of waiting for the model to call start_build a turn later.
+          setPhase("building");
+          setActiveTab("preview");
+          setUiGenerationStatus("writing-ui");
           responses.push({ id: fc.id, name: fc.name, response: { ok: true } });
         }
         else if (fc.name === "start_build") {
           if (!batchArchs.some(x => x.approved)) {
-            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: "Cannot start_build: no architecture has been approved yet. Call propose_architecture, then approve_architecture (only after the user verbally approves), THEN start_build — in separate turns." } });
+            const msg = "Cannot start_build: no architecture has been approved yet. Call propose_architecture, then approve_architecture (only after the user verbally approves), THEN start_build — in separate turns.";
+            pushGuardError(fc.name, msg);
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: msg } });
             continue;
           }
           setPhase("building");
@@ -582,25 +674,62 @@ function ScenarioCode({ apiKey, onExit }) {
         }
         else if (fc.name === "update_file") {
           const fn = fc.args.filename;
-          setFiles((prev) => prev.map(x => x.filename === fn ? { ...x, content: fc.args.content, summary: fc.args.summary || x.summary } : x));
+          const newContent = fc.args.content || "";
+          // Look up existing file (in this batch first, then committed state).
+          const existing = batchFiles.find(x => x.filename === fn) ||
+                           filesRef.current.find(x => x.filename === fn);
+          // Truncation guard: voice models sometimes emit a shrunken/partial
+          // rewrite that silently corrupts the prototype. Reject if the new
+          // content is dramatically smaller than what it's replacing.
+          if (existing && existing.content && newContent.length < Math.floor(existing.content.length * 0.5)) {
+            const msg = `Rejected update_file for ${fn}: new content (${newContent.length} chars) is < 50% of existing (${existing.content.length} chars) — likely truncated. Prefer apply_edit({description}) for live edits; the host's Editor sub-agent rewrites the file reliably without you having to emit the full HTML.`;
+            pushGuardError(fc.name, msg);
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: msg } });
+            continue;
+          }
+          if (!newContent) {
+            const msg = `Rejected update_file for ${fn}: empty content.`;
+            pushGuardError(fc.name, msg);
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: msg } });
+            continue;
+          }
+          // Keep batch shadow in sync so subsequent guards in the same batch see the update.
+          const bIdx = batchFiles.findIndex(x => x.filename === fn);
+          if (bIdx >= 0) batchFiles[bIdx] = { ...batchFiles[bIdx], content: newContent, summary: fc.args.summary || batchFiles[bIdx].summary };
+          setFiles((prev) => prev.map(x => x.filename === fn ? { ...x, content: newContent, summary: fc.args.summary || x.summary } : x));
           setFileHistory((prev) => {
             const next = new Map(prev);
             const list = next.get(fn) || [];
-            next.set(fn, [...list, { version: list.length + 1, timestamp: Date.now(), content: fc.args.content, summary: fc.args.summary || "edit" }]);
+            next.set(fn, [...list, { version: list.length + 1, timestamp: Date.now(), content: newContent, summary: fc.args.summary || "edit" }]);
             return next;
           });
           setActiveFile(fn);
           setViewingVersion(null);
-          if (/index\.html$/i.test(fn)) {
-            setPreviewLoading(true);
-            setPreviewKey(k => k + 1);
-            setTimeout(() => setPreviewLoading(false), 400);
-          }
+          // Refresh iframe on ANY file change. Cost is one harmless reload; benefit
+          // is that mis-named or non-index file updates no longer silently drop.
+          setPreviewLoading(true);
+          setPreviewKey(k => k + 1);
+          setTimeout(() => setPreviewLoading(false), 400);
+          // Surface the silent update so the user sees that something happened
+          // (otherwise update_file produces zero UI affordance and the user can't
+          // tell whether Gemi ran the tool or just claimed to).
+          const t = Date.now();
+          pushAgentActivity({
+            id: `upd-${t}-${Math.random().toString(36).slice(2, 7)}`,
+            agent: "editor",
+            status: "done",
+            startedAt: t, finishedAt: t,
+            summary: `update_file: ${fn} (${newContent.length} chars)`,
+            response: { ok: true, summary: fc.args.summary || "edit" }
+          });
+          markEditToolFired();
           responses.push({ id: fc.id, name: fc.name, response: { ok: true } });
         }
         else if (fc.name === "show_preview") {
           if (!batchFiles.some(x => /index\.html$/i.test(x.filename))) {
-            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: "Cannot show_preview: no index.html has been written yet. Call write_file({filename:'index.html', content: '<full self-contained HTML>'}) FIRST, then call show_preview. Do not announce the app is ready until you have actually written the file." } });
+            const msg = "Cannot show_preview: no index.html has been written yet. Call write_file({filename:'index.html', content: '<full self-contained HTML>'}) FIRST, then call show_preview. Do not announce the app is ready until you have actually written the file.";
+            pushGuardError(fc.name, msg);
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: msg } });
             continue;
           }
           setPhase("preview");
@@ -640,6 +769,7 @@ function ScenarioCode({ apiKey, onExit }) {
               response: { token: placeholder, mimeType: "image/png" }
             });
             if (phase === "building") setUiGenerationStatus("writing-ui");
+            markEditToolFired();
             responses.push({
               id: fc.id, name: fc.name,
               response: { token: placeholder, note: `Insert as <img src="${placeholder}">. The host substitutes the real image at render time.` }
@@ -668,9 +798,135 @@ function ScenarioCode({ apiKey, onExit }) {
                 iframe.contentWindow.postMessage({ type: "navigate", view: fc.args.view, params: fc.args.params }, "*");
               }
             }
+            markEditToolFired();
             responses.push({ id: fc.id, name: fc.name, response: { ok: true, action, view: fc.args.view || null } });
           } catch (err) {
             responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: String(err) } });
+          }
+        }
+        else if (fc.name === "apply_edit") {
+          // PHASE 4 RELIABLE EDIT PATH: hand the rewrite to the Editor sub-agent
+          // (gemini-3.5-flash text model) so Gemini Live never has to re-emit
+          // the entire index.html as a tool argument. The handler optionally
+          // chains the Designer first, then applies the result directly.
+          if (phase !== "preview") {
+            const msg = "Cannot apply_edit: not in preview phase yet. apply_edit is only valid after show_preview has returned ok. For the initial build, use write_file.";
+            pushGuardError(fc.name, msg);
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: msg } });
+            continue;
+          }
+          const indexFile = batchFiles.find(x => /index\.html$/i.test(x.filename)) ||
+                            filesRef.current.find(x => /index\.html$/i.test(x.filename));
+          if (!indexFile) {
+            const msg = "Cannot apply_edit: no index.html exists yet. Write one with write_file first.";
+            pushGuardError(fc.name, msg);
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: msg } });
+            continue;
+          }
+          const description = (fc.args.description || "").trim();
+          if (!description) {
+            const msg = "apply_edit requires a non-empty 'description' argument describing the change.";
+            pushGuardError(fc.name, msg);
+            responses.push({ id: fc.id, name: fc.name, response: { ok: false, error: msg } });
+            continue;
+          }
+          const wantsDesigner = fc.args.consult_designer === true;
+          const editorCardId = `edit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          const t0 = Date.now();
+          pushAgentActivity({
+            id: editorCardId, agent: "editor", status: "running",
+            startedAt: t0,
+            summary: `Editor: "${description.slice(0, 60)}${description.length > 60 ? "…" : ""}"`,
+            request: { description, withDesigner: wantsDesigner, htmlChars: indexFile.content.length }
+          });
+
+          let designerRec = null;
+          // Optional: run Designer first for visual changes so the Editor has guidance.
+          if (wantsDesigner) {
+            const designerCardId = `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            pushAgentActivity({
+              id: designerCardId, agent: "designer", status: "running",
+              startedAt: Date.now(),
+              summary: `Designer (for edit): "${description.slice(0, 50)}"`,
+              request: { userMessage: description, contextLength: indexFile.content.length }
+            });
+            try {
+              const dRes = await window.SubAgents.runDesigner({
+                question: description,
+                currentHtml: indexFile.content.slice(0, 4000),
+                apiKey
+              });
+              designerRec = dRes.result || dRes.text;
+              updateAgentActivity(designerCardId, {
+                status: "done", finishedAt: Date.now(),
+                summary: `Designer returned ${(dRes.result?.palette?.length || 0)} colours`,
+                response: designerRec,
+                engineResource: dRes.engine_resource_name
+              });
+            } catch (dErr) {
+              console.warn("apply_edit: Designer step failed, continuing without:", dErr);
+              updateAgentActivity(designerCardId, {
+                status: "error", finishedAt: Date.now(),
+                summary: "Designer unreachable — proceeding without",
+                response: { error: String(dErr) }
+              });
+            }
+          }
+
+          try {
+            const editorRes = await window.SubAgents.runEditor({
+              currentHtml: indexFile.content,
+              changeRequest: description,
+              designerRecommendation: designerRec,
+              apiKey
+            });
+            const newHtml = editorRes.html;
+            const oldLen = indexFile.content.length;
+            const newLen = newHtml.length;
+            const delta = newLen - oldLen;
+            const fn = indexFile.filename;
+
+            // Mirror the update_file write path exactly so file history,
+            // active file, and iframe refresh all stay consistent.
+            const bIdx = batchFiles.findIndex(x => x.filename === fn);
+            if (bIdx >= 0) batchFiles[bIdx] = { ...batchFiles[bIdx], content: newHtml, summary: description };
+            setFiles((prev) => prev.map(x => x.filename === fn
+              ? { ...x, content: newHtml, summary: description }
+              : x));
+            setFileHistory((prev) => {
+              const next = new Map(prev);
+              const list = next.get(fn) || [];
+              next.set(fn, [...list, { version: list.length + 1, timestamp: Date.now(), content: newHtml, summary: description }]);
+              return next;
+            });
+            setActiveFile(fn);
+            setViewingVersion(null);
+            setPreviewLoading(true);
+            setPreviewKey(k => k + 1);
+            setTimeout(() => setPreviewLoading(false), 400);
+
+            const tookMs = Date.now() - t0;
+            updateAgentActivity(editorCardId, {
+              status: "done", finishedAt: Date.now(),
+              summary: `Editor: applied (Δ ${delta >= 0 ? "+" : ""}${delta} chars, ${(tookMs/1000).toFixed(1)}s, ${editorRes.modelUsed})`,
+              response: { ok: true, newLength: newLen, model: editorRes.modelUsed }
+            });
+            markEditToolFired();
+            responses.push({
+              id: fc.id, name: fc.name,
+              response: { ok: true, summary: `Applied "${description}". Preview updated.` }
+            });
+          } catch (eErr) {
+            console.error("apply_edit: Editor failed:", eErr);
+            updateAgentActivity(editorCardId, {
+              status: "error", finishedAt: Date.now(),
+              summary: "Editor failed — file unchanged",
+              response: { error: String(eErr) }
+            });
+            responses.push({
+              id: fc.id, name: fc.name,
+              response: { ok: false, error: String(eErr), note: "Editor sub-agent failed. Apologize briefly in Hebrew and ask the user to rephrase, OR try update_file with the full new HTML if you have it ready." }
+            });
           }
         }
         else if (fc.name === "consult_designer" || fc.name === "consult_qa" || fc.name === "consult_developer") {
@@ -736,6 +992,46 @@ function ScenarioCode({ apiKey, onExit }) {
   useEffect(() => {
     if (architectures.length > 0 && phase === "discovery") setPhase("architecture");
   }, [architectures.length]); // eslint-disable-line
+
+  // No-op detector tick: if Phase 4 user said "make it X" / "add Y" and >8s
+  // pass with no edit tool call, surface a host-error card so the silence is
+  // visible to the user instead of looking like a frozen session.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const req = lastEditRequestRef.current;
+      if (!req || req.warned) return;
+      const age = Date.now() - req.at;
+      if (age < 8000) return;
+      // Any edit tool fired since the request landed? Clear and exit.
+      if (lastEditToolAtRef.current >= req.at) {
+        lastEditRequestRef.current = null;
+        return;
+      }
+      req.warned = true;
+      const snippet = req.text.length > 80 ? req.text.slice(0, 80) + "…" : req.text;
+      pushGuardError("apply_edit",
+        `Heard your request ("${snippet}") but no edit tool ran in ${Math.round(age/1000)}s. Try rephrasing — or say "אפליי אדיט" / "apply edit" to retry.`);
+    }, 2000);
+    return () => clearInterval(id);
+  }, []); // eslint-disable-line
+
+  // Surface sub-agent model fallbacks in the rail (primary → fallback model)
+  useEffect(() => {
+    const onFallback = (e) => {
+      const t = Date.now();
+      pushAgentActivity({
+        id: `fallback-${t}-${Math.random().toString(36).slice(2, 7)}`,
+        agent: "host",
+        status: "error",
+        startedAt: t,
+        finishedAt: t,
+        summary: `Sub-agent fell back: ${e.detail.primary} → ${e.detail.fallback}`,
+        response: { error: e.detail.error }
+      });
+    };
+    window.addEventListener("subagent:fallback", onFallback);
+    return () => window.removeEventListener("subagent:fallback", onFallback);
+  }, []);
 
   // Session lifecycle
   useEffect(() => {
@@ -881,6 +1177,12 @@ function ScenarioCode({ apiKey, onExit }) {
 
   const approveCurrentArch = () => {
     if (!selectedArch || !live.session.current) return;
+    // Immediate visual feedback: flip to the build splash before Gemi catches
+    // up. Without this the user clicks Approve and stares at the architecture
+    // for the 2–10s window while Gemi speaks + calls the tools.
+    setPhase("building");
+    setActiveTab("preview");
+    setUiGenerationStatus("writing-ui");
     // Tell Gemi the user approved this version
     live.session.current.sendText(`[USER APPROVED ARCHITECTURE VERSION ${selectedArch.version}]. Please call approve_architecture and start building.`, true);
   };
@@ -1071,25 +1373,6 @@ ${selectedArch.mermaid || ""}
             {activeTab === "architecture" && (
               <div className="diagram-stage gemi-diagram-stage" style={{ height: "100%" }}>
                 <div className="diagram-canvas">
-                  {currentProjectId && files.length === 0 && architectures.length > 0 && (
-                    <div className="legacy-arch-banner">
-                      <div className="ttl">This is an older project — only the architecture was preserved.</div>
-                      <div className="sub">
-                        It was saved before browser storage could fit the generated files. The diagram below is intact.
-                        Talk to Gemi and say <i>"build this for me"</i> and he'll rebuild from this architecture.
-                      </div>
-                      <button
-                        className="btn btn-gradient btn-sm"
-                        onClick={() => live.session.current?.sendText(
-                          "Please build this app from the approved architecture above. Start with start_build, then write_file('index.html', ...).",
-                          true
-                        )}
-                        disabled={!live.session.current}
-                      >
-                        <Icon name="bolt" size={12} color="white" /> Rebuild from this architecture
-                      </button>
-                    </div>
-                  )}
                   {selectedArch ? (
                     <div className="diagram-card">
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
@@ -1402,7 +1685,45 @@ function agentLabel(agent) {
   if (agent === "qa") return "QA";
   if (agent === "designer") return "Designer";
   if (agent === "developer") return "Developer";
+  if (agent === "editor") return "Editor";
+  if (agent === "host") return "Host Guard";
   return agent;
+}
+
+// Heuristic: does this user utterance look like a Phase 4 change request?
+// Used by the no-op detector to decide whether to arm the "no tool fired" guard.
+// Errs liberal — false positives just expire silently after 8s; false
+// negatives mean the user's silence on stage stays unexplained.
+const EDIT_KEYWORDS_RE = new RegExp(
+  // English verbs / adjectives
+  "\\b(make|change|add|fix|update|move|remove|swap|replace|rename|hide|show|put|set|increase|decrease|bigger|smaller|larger|darker|lighter|brighter|wider|taller|shorter)\\b" +
+  "|\\b(header|footer|button|menu|card|sidebar|navbar|background|color|colour|font|spacing|padding|margin|hero|logo|image|icon)\\b" +
+  "|\\b(red|blue|green|yellow|purple|pink|orange|black|white|gray|grey|dark|light)\\b" +
+  // Hebrew imperatives & nouns (no \b — Hebrew doesn't use ASCII word boundaries)
+  "|(תוסיף|תשנה|תחליף|תזיז|תעדכן|תקן|תתקן|הסר|תסיר|תוריד|הוסף|שנה|תעשה|תהפוך|תגדיל|תקטין|תרחיב|תצמצם)" +
+  "|(כפתור|רקע|צבע|כותרת|פוטר|תפריט|כרטיס|סרגל|רוחב|גובה|פונט|לוגו|תמונה)" +
+  "|(כהה|בהיר|אדום|כחול|ירוק|צהוב|סגול|ורוד|כתום|שחור|לבן|אפור)",
+  "i"
+);
+function isEditRequest(text) {
+  if (!text) return false;
+  return EDIT_KEYWORDS_RE.test(text);
+}
+
+// Heuristic: does this utterance look like the user approving the architecture?
+// Kept tight on purpose — false positives would skip Gemi's discussion phase.
+// Matches explicit approval words only, not vague positive reactions.
+const APPROVAL_RE = new RegExp(
+  // English
+  "\\b(approve|approved|approving|i approve|yes approve|let'?s (go|build|do it|start|ship it)|go ahead|sounds good|looks good|let'?s proceed|proceed|build it|ship it)\\b" +
+  "|\\b(yes|yep|yeah|yup|sure|confirmed|confirm|ok|okay|fine)\\b\\s*(,?\\s*(let'?s|go|build|do|start|proceed))" +
+  // Hebrew explicit-approval verbs / phrases
+  "|(אני מאשר|מאשר את זה|מאשרת|אישרתי|אישור|אשר|תאשר|אוקיי|אוקי|בסדר|מקובל|מקובל עליי|מצוין|מצויין|נמשיך|בוא נמשיך|בוא נבנה|תתחיל|התחל|נצא לדרך|זה טוב|זה מעולה|אהבתי|מושלם|יאללה|יאלה)",
+  "i"
+);
+function isApprovalUtterance(text) {
+  if (!text) return false;
+  return APPROVAL_RE.test(text);
 }
 
 function guessLang(filename) {
