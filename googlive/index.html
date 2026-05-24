@@ -9,6 +9,19 @@
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Sans+Text:wght@400;500&family=Google+Sans+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 
+  <script>
+    // Apply persisted (or OS-preferred) theme before first paint to avoid a flash.
+    (function () {
+      try {
+        var saved = localStorage.getItem("geminilive_theme");
+        var effective;
+        if (saved === "dark" || saved === "light") effective = saved;
+        else effective = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+        document.documentElement.dataset.theme = effective;
+      } catch (e) {}
+    })();
+  </script>
+
   <template id="__bundler_thumbnail">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <defs>
@@ -74,6 +87,7 @@
   <script type="text/babel" src="scenario-survey.jsx"></script>
   <script type="text/babel" src="scenario-code.jsx"></script>
   <script type="text/babel" src="scenario-translate.jsx"></script>
+  <script type="text/babel" src="scenario-interview.jsx"></script>
   <script type="text/babel" src="app.jsx"></script>
 </body>
 </html>

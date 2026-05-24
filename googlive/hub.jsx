@@ -28,6 +28,15 @@ const SCENARIOS = [
     glyphBg: "linear-gradient(135deg, #34A853, #1A73E8)"
   },
   {
+    id: "interview",
+    name: "Online Interview",
+    accent: "#9B72CB",
+    tags: ["voice", "interview", "feedback"],
+    desc: "Practice an online interview with a Gemini-powered professional interviewer. Pick a role and seniority, get role-tailored questions, natural follow-ups, and structured feedback at the end.",
+    icon: "chat",
+    glyphBg: "linear-gradient(135deg, #9B72CB, #4285F4)"
+  },
+  {
     id: "translate",
     name: "Live Translation",
     accent: "#FBBC04",
@@ -38,10 +47,11 @@ const SCENARIOS = [
   }
 ];
 
-function Hub({ onPick, onSettings }) {
+function Hub({ onHome, onPick, onSettings }) {
   return (
     <div>
       <AppBar
+        onHome={onHome}
         right={
           <button className="btn btn-ghost" onClick={onSettings} title="Settings">
             <Icon name="settings" size={18} /> Settings
@@ -56,7 +66,7 @@ function Hub({ onPick, onSettings }) {
           </span>
         </h1>
         <p className="sub">
-          Four live scenarios powered by Gemini 3.1 Flash. Voice in, voice out, vision and tool-calling — all streaming. Pick a scenario and run the demo end-to-end.
+          Five live scenarios powered by Gemini 3.1 Flash. Voice in, voice out, vision and tool-calling — all streaming. Pick a scenario and run the demo end-to-end.
         </p>
         <div className="hub-grid">
           {SCENARIOS.map((s) => (

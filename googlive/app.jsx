@@ -4,7 +4,7 @@ const INJECTED_KEY = (typeof window !== "undefined" && window.__GEMINI_API_KEY) 
 
 function App() {
   const [apiKey, setApiKey] = useState(() => INJECTED_KEY || localStorage.getItem(LS_KEY) || localStorage.getItem("googlelive_api_key") || "");
-  const [route, setRoute] = useState("hub"); // hub | architect | survey | code | translate | settings
+  const [route, setRoute] = useState("hub"); // hub | architect | survey | code | translate | interview | settings
   const [showSettings, setShowSettings] = useState(false);
 
   const saveKey = (k) => {
@@ -13,10 +13,12 @@ function App() {
     else localStorage.removeItem(LS_KEY);
   };
 
+  const goHome = () => { setShowSettings(false); setRoute("hub"); };
+
   if (!apiKey) {
     return (
       <>
-        <AppBar />
+        <AppBar onHome={goHome} />
         <SetupCard onSave={saveKey} />
       </>
     );
@@ -25,7 +27,7 @@ function App() {
   if (showSettings) {
     return (
       <>
-        <AppBar onHome={() => setShowSettings(false)} />
+        <AppBar onHome={goHome} />
         <div className="setup">
           <h2>Settings</h2>
           <p>Your Gemini API key is stored locally in this browser only.</p>
@@ -39,6 +41,11 @@ function App() {
           <p className="hint">
             Get one at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com</a>
           </p>
+
+          <div className="divider" />
+          <label>Appearance</label>
+          <ThemePicker />
+
           <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
             <button className="btn btn-primary" onClick={() => setShowSettings(false)}>Done</button>
             <button className="btn btn-ghost" onClick={() => { saveKey(""); setShowSettings(false); }}>
@@ -50,14 +57,15 @@ function App() {
     );
   }
 
-  const exit = () => setRoute("hub");
+  const exit = goHome;
 
   if (route === "architect") return <ScenarioArchitect apiKey={apiKey} onExit={exit} />;
   if (route === "survey")    return <ScenarioSurvey    apiKey={apiKey} onExit={exit} />;
   if (route === "code")      return <ScenarioCode      apiKey={apiKey} onExit={exit} />;
   if (route === "translate") return <ScenarioTranslate apiKey={apiKey} onExit={exit} />;
+  if (route === "interview") return <ScenarioInterview apiKey={apiKey} onExit={exit} />;
 
-  return <Hub onPick={setRoute} onSettings={() => setShowSettings(true)} />;
+  return <Hub onHome={goHome} onPick={setRoute} onSettings={() => setShowSettings(true)} />;
 }
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
